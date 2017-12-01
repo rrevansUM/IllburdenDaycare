@@ -1,0 +1,1571 @@
+---
+title: "Illness Burden in Daycare Attendees"
+date: "`r format(Sys.time(),'%B, %d, %Y')`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    code_folding: hide
+    fig_caption: true
+bibliography: boca_library.bib
+---
+
+```{r knitr_init, echo = FALSE, cache = FALSE}
+library(knitr)
+library(rmdformats)
+
+## Global options
+options(max.print = "75")
+opts_chunk$set(echo = TRUE,
+	             cache = TRUE,
+               prompt = FALSE,
+               tidy = FALSE,
+               comment = NA,
+               message = FALSE,
+               warning = FALSE)
+opts_knit$set(width = 85)
+```
+
+Note: the reader may notice that I sometimes write code, comment it out, then save the output and read it in afterward. This is to save compilation time when knitting this markdown document.
+
+# Introduction
+
+Human bocavirus (HBoV-1), a DNA virus first identified in 2005 [@allander_cloning_2005], has been frequently detected in young children experiencing acute respiratory tract illness. HBoV-1 has been detected in up to 18% of samples from children with respiratory illness [@jartti_human_2012]. Over 85% of children in the United States have antibodies to this virus by 4 years of age [@kahn_seroepidemiology_2008], yet HBoV-1 is rarely detected in adults [@jartti_human_2012]. Furthermore, HBoV-1 is often detected in children without evidence of disease and is often identified alongside with other respiratory viruses associated with acute illness [@jartti_human_2012, @martin_clinical_2008, @fry_human_2007, @allander_human_2007, @christensen_human_2010]. Thus, retrospective or cross-sectional analyses designed to make an inference on disease progression, incidence and persistence are problematic. The purpose of this analysis is in identifying trends regarding persistence and latency of human bocavirus 1 in a pediatric cohort.
+
+## Data Source
+
+Data for the current study comes from previously reported prospective studies of human herpesvirus 6 (HHV-6) natural history and human bocavirus-1 shedding events from a group of infants [@zerr_population-based_2005], [@martin_human_2015]. Incidence of HHV-6 has been reported between 64-83% in the United States and in some studies up to 90% prevalence has been reported [@braun_human_1997]. For this reason, the entire cohort of children carried HHV-6 at one point in the 2-year study period.
+
+## Study Population
+
+Inclusion criteria for enrollment included pregnancy of the mother, receipt of care at a Seattle area-based obstetrical practice, and provision of informed consent prior to participation. Children were then followed from birth for up to two years between April 1997 and August 2003. No further exclusion criteria were applied within the birth cohort.
+
+## Clinical Data Collection
+
+Demographic data were collected from the mother at enrollment through administered surveys. Symptom data were collected using a daily diary recorded by the mother and/or father. Symptoms included: fever (temperature >38.0&deg; C), roseolla cough, runny-nose, vomiting, diarrhea, rash, fussiness above the baseline level for the child, seizure, and physician visit for illness. Data was further collected on breast-feeding, breast-feeding duration, group child-care, daycare attendance and duration and playgroup attendance.
+
+## Methods 
+
+Infection episodes were defined as at least two weeks of RT-PCR positive HBoV-1 infection for entry and exit with no more than 1 interrim negative specimen within the episode. The first episode was termed primary with all others defined as secondary, tertiary, quaternary, and quinary. For purposes of analyses all secondary and subsequent infection episodes were categorized as 'secondary'.
+
+# Libraries
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(tableone)
+library(ggthemes)
+```
+
+# Load Data
+
+```{r}
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata")
+# setwd("S:/MartinEpi/Analysis/Bocavirus Persistence Modeling/Rdata/")
+
+files <- list.files(pattern = "*.rds")
+file_names <- gsub(".rds", "", files)
+file_names <- gsub("_", ".", file_names)
+for (i in 1:length(files)) {
+  assign(file_names[i], readRDS(files[i]))
+}
+rm(files, file_names)
+```
+
+```{r, eval = TRUE, echo = FALSE}
+# true minimal theme
+theme_trueMinimal <- function(base_size = 16, base_family = "") {
+    theme_bw(base_size = base_size, base_family = base_family) %+replace% 
+        theme(axis.ticks = element_blank(), 
+              legend.background = element_blank(), 
+              legend.key = element_blank(), 
+              panel.background = element_blank(), 
+              strip.background = element_blank(), 
+              panel.border = element_blank(),
+              panel.grid.major = element_blank(), 
+              panel.grid.minor = element_blank(),
+              plot.background = element_blank(), 
+              axis.line = element_line(), 
+              axis.line.y = element_blank(),
+              complete = TRUE)
+}
+```
+
+# Data processing
+
+```{r}
+ids <- data.frame(id = unique(main$id))
+to_factor <- c("pos", "female", "race", "race_text", "family.income",
+               "siblings", "breast_fed", "day_care", "seizure_hx", 
+               "pg_tmp")
+floor_week <- function(x) lubridate::floor_date(x, unit = "week")
+to_week <- c("maternal.dob", "infant.dob", "stopdate",
+             "daycare.start", "daycare.end",
+             "play.start", "play.end", "last.fu.visit")
+
+demo <- main %>%
+  mutate(
+    id = as.character(id),
+    race_text = as.character(race_text),
+    race_text = ifelse(race_text %in% c("white,asian", "nat amer", "hispanic"),
+                       "other", race_text),
+    race_text = ifelse(race_text == "", "unknown", race_text),
+    race = ifelse(race %in% c(3, 4, 5), 3, race),
+    last.fu.visit = as.Date(last.f.u.visit, "%d-%b-%y"),
+    pg_tmp = ifelse(play.group == "Y", 1, 0),
+    pg_tmp = ifelse(play.group == "unknown", NA, pg_tmp),
+    mage.at.birth = as.numeric(difftime(infant.dob, maternal.dob, 
+                                        units = "days") / 365),
+    dc_dur = as.numeric(difftime(daycare.end, daycare.start,
+                                 units = "weeks")),
+    pg_dur = as.numeric(difftime(play.end, play.start,
+                                 units = "weeks"))
+    ) %>%
+  mutate_at(vars(to_factor), funs(factor)) %>%
+  mutate_at(vars(to_week), funs(floor_week)) %>%
+  select(id, pos, female, mage.at.birth, maternal.dob:until.when,
+         daycare.start, daycare.end, dc_dur,
+         play.start, play.end, pg_tmp, pg_dur,
+         bf_duration, siblings:seizure_hx, last.fu.visit) %>%
+  rename(
+    hbov.pos = pos,
+    play.group = pg_tmp
+    )
+```
+
+Setup time-dependent covariates: daycare and playgroup attendance. Age should probably be adjusted for too - maybe piecewise on age?
+
+```{r}
+dc_dates <- demo %>%
+  mutate(daycare.end = if_else(is.na(daycare.end), stopdate, daycare.end)) %>%
+  select(id, daycare.start, daycare.end) %>%
+  filter(!is.na(daycare.start))
+
+pg_dates <- demo %>%
+  select(id, play.start, play.end) %>%
+  filter(!is.na(play.start))
+```
+
+```{r}
+dummy <- function(x) {
+  x <- ifelse(x != 0, 1, 0)
+  x
+}
+
+diary <- diaries %>%
+  right_join(ids, by = "id") %>%
+  filter(!is.na(diary)) %>%
+  mutate(week = floor_week(date)) %>%
+  select(id, week, fever, cough, runnynose) %>%
+  group_by(id, week) %>%
+  summarise_at(vars(fever, cough, runnynose), funs(sum(., na.rm = TRUE))) %>%
+  ungroup() %>%
+  mutate_at(vars(fever, cough, runnynose), funs(dummy)) %>%
+  mutate(
+    sum = rowSums(.[3:5]),
+    ill = ifelse(sum >= 2, 1, 0)
+  ) %>%
+  group_by(id) %>%
+  mutate(stdy_wk = row_number()) %>%
+  ungroup() %>%
+  # add daycare dates
+  full_join(dc_dates, by = "id") %>%
+  # add playgroup dates
+  full_join(pg_dates, by = "id") %>%
+  mutate(
+    daycare = ifelse(week >= daycare.start & week <= daycare.end, 1, 0),
+    daycare = ifelse(is.na(daycare), 0, daycare),
+    playgrp = ifelse(week >= play.start & week <= play.end, 1, 0),
+    playgrp = ifelse(is.na(playgrp), 0, playgrp)
+  ) %>%
+  select(-daycare.start, -daycare.end, -play.start, -play.end)
+```
+
+## Ol' Classic Table 1
+
+Assess normality of continuous data:
+
+```{r}
+nonnormal <- c("total.number.of.family", 
+               "number.of.family.18.yrs",
+               "dc_dur")
+par(mfrow = c(1, length(nonnormal)))
+for(i in 1:length(nonnormal)) {
+  plot(density(demo[, nonnormal[i]], na.rm = TRUE),
+       main = nonnormal[i])
+}
+```
+
+```{r}
+# dput(colnames(demo))
+vars <- c("hbov.pos", "female", "mage.at.birth", "race_text", 
+          "total.number.of.family", "number.of.family.18.yrs", 
+          "family.income", "siblings", "breast_fed", "bf_duration", 
+          "day_care", "dc_dur", "play.group", "pg_dur", "seizure_hx")
+tbl1 <- CreateTableOne(vars = vars, data = demo)
+print(tbl1, nonnormal = nonnormal)
+rm(tbl1)
+```
+
+Summarize panel data
+
+```{r}
+sapply(diary[, c(3:7, 9, 10)], table)
+```
+
+Visualize illness chains
+
+```{r}
+some_ids <- sample(unique(diary$id), 4, replace = FALSE)
+diary %>%
+  filter(id %in% some_ids) %>%
+  select(id, stdy_wk, ill) %>%
+  ggplot(aes(x = stdy_wk, y = ill)) %>%
+  add(geom_point()) %>%
+  add(geom_line()) %>%
+  add(facet_wrap(~id, nrow = 2)) %>%
+  add(scale_y_continuous(breaks = c(0, 1))) %>%
+  add(theme_trueMinimal(16)) %>%
+  add(labs(
+    x = "\nStudy Week",
+    y = "Recorded Illness\n"
+  ))
+```
+
+```{r}
+some_ids <- sample(unique(diary$id), 4, replace = FALSE)
+diary %>%
+  filter(id %in% some_ids) %>%
+  select(id, stdy_wk, ill) %>%
+  ggplot(aes(x = stdy_wk, y = ill, color = id)) %>%
+  add(geom_point()) %>%
+  add(geom_line()) %>%
+  add(scale_y_continuous(breaks = c(0, 1))) %>%
+  add(theme_trueMinimal(16)) %>%
+  add(labs(
+    x = "\nStudy Week",
+    y = "Recorded Illness\n"
+  ))
+```
+
+Illness episodes/recorded are randomly distributed throughout the studied life history of these infants, as evidenced by the above vignettes.
+
+Daycare attendance may modify illness frequency, the timeliness of daycare attendance of the infant lifecourse is more or less random:
+
+```{r}
+some_ids <- sample(demo$id[demo$day_care == 1], 4)
+
+dc_times <- diary %>%
+  filter(id %in% some_ids & daycare == 1) %>%
+  group_by(id) %>%
+  mutate(first = row_number() == 1, last = row_number() == n()) %>%
+  filter(first | last) %>%
+  select(id, stdy_wk) %>%
+  mutate(
+    timevar = row_number(),
+    timevar = ifelse(timevar == 1, "xmin", "xmax")
+    ) %>%
+  spread(key = timevar, value = stdy_wk)
+
+diary %>%
+  filter(id %in% some_ids) %>%
+  ggplot(aes(x = stdy_wk, y = ill)) %>%
+  add(geom_point()) %>%
+  add(geom_line()) %>%
+  add(geom_rect(data = dc_times, 
+                aes(x = NULL, y = NULL,
+                    xmin = xmin, 
+                    xmax = xmax,
+                    ymin = -Inf, 
+                    ymax = Inf),
+                alpha = 0.3)) %>%
+  add(facet_wrap(~id)) %>%
+  add(theme_trueMinimal()) %>%
+  add(scale_y_continuous(breaks = c(0, 1))) %>%
+  add(labs(
+    x = "\nStudy Week",
+    y = "ARI episodes\n",
+    caption = "Period in grey denotes daycare attendance"
+  ))
+```
+
+```{r, fig.width = 8, fig.height = 10}
+times <- diary %>%
+  filter(daycare == 1) %>%
+  group_by(id) %>%
+  mutate(first = row_number() == 1, last = row_number() == n()) %>%
+  filter(first | last) %>%
+  select(id, stdy_wk) %>%
+  mutate(
+    timevar = row_number(),
+    timevar = ifelse(timevar == 1, "xmin", "xmax")
+    ) %>%
+  spread(key = timevar, value = stdy_wk)
+
+points <- diary %>%
+  right_join(times, by = "id") %>%
+  filter(ill == 1) %>%
+  select(id, stdy_wk)
+
+lines <- diary %>%
+  group_by(id) %>%
+  arrange(stdy_wk) %>%
+  filter(row_number() == n()) %>%
+  select(id, stdy_wk) %>%
+  ungroup() %>%
+  right_join(distinct(points, id), by = "id")
+
+points %>%
+  ggplot(aes(x = id, y = stdy_wk)) %>%
+  add(coord_flip()) %>%
+  add(geom_point(size = 0.5)) %>%
+  add(geom_linerange(data = lines, 
+                     aes(x = id, ymin = 0, ymax = stdy_wk),
+                     size = 0.1)) %>%
+  add(geom_linerange(data = times,
+                     aes(x = id, ymin = xmin, ymax = xmax),
+                     size = 2,
+                     alpha = 0.5,
+                     inherit.aes = FALSE)) %>%
+  add(theme_trueMinimal()) %>%
+  add(theme(axis.text.y = element_text(size = 7))) %>%
+  add(labs(
+    y = "Infant Age, Weeks",
+    x = "ID"
+    ))
+```
+
+The above plot describes ARI recurrence by infant. Each point is an ARI episode ($\ge$ 2 of cough, runny nose, sore throat, etc.), and each thick grey line is the duration of daycare attendance as recorded in the diary.
+
+# Modelling
+
+## Markov Approach
+
+Identify illness episodes: negative (1), detection (2), first observation (firstobs).
+
+```{r}
+states <- diary %>%
+  group_by(id) %>%
+  mutate(
+    firstobs = as.integer(row_number() == 1),
+    state = ill + 1,
+    state = as.integer(ifelse(row_number() == n(), 0, state)),
+    daycare = factor(daycare, 0:1, 0:1),
+    playgrp = factor(playgrp, 0:1, 0:1)
+    ) %>%
+  rename(weeks = stdy_wk) %>%
+  ungroup() %>%
+  mutate(id = as.integer(id)) %>%
+  arrange(id, weeks)
+```
+
+Tally observed movement between states and sojourn times
+
+```{r}
+library(msm)
+statetable.msm(state, id, data = states)
+```
+
+We have a two-state markov chain: illness (state:1) - recovery (state:2) - terminus (censor:0), terminus being the end of the study. The Q, transition matrix is laid out like so:
+
+$$
+Q = \left(\begin{array}{cc} 
+-q_{12} & q_{12} \\
+q_{21} & -q_{21}
+\end{array}\right)
+$$ 
+
+Which can be represented diagrammatically as, 
+
+```{r, fig.width = 6, fig.height = 6}
+library(diagram)
+
+names <- c("ARI (-)", "ARI (+)")
+M <- matrix(nrow = 2, ncol = 2, byrow = TRUE, data = 0)
+M[1, 1] <- paste(expression("q"[11]))
+M[2, 1] <- paste(expression("q"[12]))
+M[2, 2] <- paste(expression("q"[22]))
+M[1, 2] <- paste(expression("q"[21]))
+curves <- matrix(c(0, 0.1, 0.1, 0), byrow = TRUE, nrow = 2)
+plotmat(M,
+        pos = 2,
+        shadow.size = 0,
+        curve = curves,
+        name = names,
+        lwd = 1,
+        box.lwd = 2,
+        cex.txt = 0.8,
+        self.cex = 0.5,
+        self.shiftx = c(-0.1, 0.1),
+        self.shifty = c(0.1, 0.1),
+        self.arrpos = c(1.6, 1.5),
+        arr.type = "triangle")
+```
+
+Initial values could be set by supposing that transitions between states take place only at the observation times, fortunately the data we are working with can be said to have exact observation times. If we observe $n_{rs}$ transitions from state $r$ to state $s$, and a total of $n_{r}$ transitions from state $r$, then $q_{rs}/q_{rr}$ can be estimated by $n_{rs}/n_{r}$. Then, given a total of $T_{r}$ years spent in state $r$, the mean sojourn time $1/q_{rr}$ can be estimated as $T_{r}/n_{r}$. Thus, $n_{rs}/T_{r}$ is a crude estimate of $q_{rs}$. The msm package provides a function crudeinits.msm for calculating initial values in this way.
+
+Initialized Q matrix, entries generated above
+
+```{r}
+Q <- matrix(c(0.0, 1.0, 1.0, 0.0), nrow = 2, ncol = 2)
+
+crudeQ <- crudeinits.msm(state ~ weeks, id,
+                         data = states,
+                         censor = 0,
+                         qmatrix = Q)
+
+crudeQ
+# rowSums(crudeQ)
+# 0 0 (row sums constrained to be zero)
+```
+
+### Without Covariates
+
+Running the model without covariates or censoring
+
+```{r}
+markov1 <- msm(state ~ weeks,
+               subject = id,
+               censor = 0,
+               data = states,
+               qmatrix = crudeQ,
+               gen.inits = TRUE)
+markov1
+```
+
+Estimated Q matrix:
+
+```{r}
+qmatrix.msm(markov1)
+```
+
+Estimated probability transition matrix:
+
+```{r}
+pmatrix.msm(markov1, ci = "normal", t = 1, cl = 0.95)
+```
+
+Estimated Sojourn Times - time spent in each state.
+
+```{r}
+sojourn.msm(markov1)
+```
+
+The interpretation of the estimated transition intensity matrix is somewhat interesting: the mean time in non-ill (non-ARI) state is 6.6 weeks (95% CI: 6.1 - 7.2 weeks) and the mean duration of ARI episodes is 1.4 weeks (95% CI: 1.3 - 1.5 weeks).
+
+The total duration in any particular state can be estimated with bootstrapped errors:
+
+```{r}
+# totals <- totlos.msm(markov1,
+#                      fromt = 0,
+#                      tot = 52,
+#                      ci = "bootstrap",
+#                      B = 100,
+#                      cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+# saveRDS(totals, "markov1_totals52.rds")
+totals <- readRDS("markov1_totals52.rds")
+
+totals
+```
+
+Within the first year of life, the estimated total number of weeks spent in ARI episodes is 8.9 weeks (95% CI: 8.1 - 9.9).
+
+Each entry in the estimated transition probability matrix can be interpreted as the probability of occupying state s at time = origin + t, conditionally on occupying state r at time = origin. For t = 1 (1 weeks time), the probability of an ARI is 10.1% (95% CI: 9.5% - 10.8%). At 3 weeks after birth the probability of an ARI is 16.2% (95% CI: 15.0% - 17.3%). We can plot the estimated probability trajectory for 10 simulated weeks:
+
+```{r, eval = TRUE, echo = FALSE}
+pmat_sim <- function(model,
+                     iterations,
+                     levels = NULL, 
+                     labels = NULL) {
+  require(dplyr)
+  df_list <- list()
+  for (i in 1:iterations) {
+    pmat <- pmatrix.msm(markov1, ci = "normal", t = i, cl = 0.95)
+    estimates <- as.data.frame(as.table(pmat$estimates))
+    colnames(estimates) <- c("From", "To", "P_rs")
+    UB <- as.data.frame(as.table(pmat$U))
+    LB <- as.data.frame(as.table(pmat$L))
+    estimates$UB <- UB$Freq
+    estimates$LB <- LB$Freq
+    estimates$time <- as.numeric(i)
+    df_list[[i]] <- estimates
+  } # end for
+  df <- bind_rows(df_list)
+  if (!is.null(levels)) {
+    df <- df %>% 
+      mutate(
+        transition = paste(From, To, sep = " - "),
+        transition = factor(transition,
+                            levels = levels,
+                            labels = labels)
+      ) %>%
+      select(-From, -To)
+  } # end if
+  return(df)
+}
+```
+
+```{r}
+Qlevels <- paste("State", 1:ncol(Q))
+Qlevels <- expand.grid(Qlevels, Qlevels)
+Qlevels <- mutate(Qlevels, transition = paste(Var1, "-", Var2))[, 3]
+
+# choose what you want to call the transitions
+Qlabels <- c("ARI (-)", "ARI (+)")
+Qlabels <- expand.grid(Qlabels, Qlabels)
+Qlabels <- mutate(Qlabels, transition = paste(Var1, "-", Var2))[, 3]
+
+pmat <- pmat_sim(markov1, 10, levels = Qlevels, labels = Qlabels)
+
+# this includes everything, as a check that the model is specified correctly
+pmat %>%
+  arrange(transition, time) %>%
+  ggplot(aes(x = time)) %>%
+  add(geom_line(aes(y = P_rs))) %>%
+  add(geom_line(aes(y = UB), linetype = 2)) %>%
+  add(geom_line(aes(y = LB), linetype = 2)) %>%
+  add(facet_wrap(~transition, nrow = nrow(Q), ncol = ncol(Q))) %>%
+  add(theme_base()) %>%
+  add(labs(
+    x = "\n Time since birth, weeks",
+    y = expression(hat(P)[rs]),
+    caption = "--- Gaussian 95% confidence bands"
+  ))
+```
+
+All infants exit the study (END is an absorbing state), i.e. in the above plot, ARI (-) - END and ARI (+) - END are the same.
+
+Probabilities for the first year of life (52 weeks)
+
+```{r, fig.width = 7, fig.height = 7}
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+# pmat <- pmat_sim(markov1, 52, levels = Qlevels, labels = Qlabels)
+# saveRDS(pmat, "markov1_pmat52.rds")
+pmat <- readRDS("markov1_pmat52.rds")
+
+# subset labels
+# pmat_red <- pmat[pmat$transition %in% Qlabels[c(1:2, 4:5)], ]
+
+# re-orient as q11, q12, q21, q22 
+pmat$transition <- factor(pmat$transition,
+                          levels(pmat$transition)[c(1, 3, 4, 2)])
+
+pmat %>%
+  arrange(transition, time) %>%
+  ggplot(aes(x = time)) %>%
+  add(geom_line(aes(y = P_rs))) %>%
+  add(geom_line(aes(y = UB), linetype = 2)) %>%
+  add(geom_line(aes(y = LB), linetype = 2)) %>%
+  add(facet_wrap(~transition, 
+                 nrow = length(levels(pmat$transition)) / 2, 
+                 ncol = length(levels(pmat$transition)) / 2 )) %>%
+  add(theme_base()) %>%
+  add(labs(
+    x = "\n Time since birth, weeks",
+    y = expression(hat(P)[rs]),
+    caption = "--- Gaussian 95% confidence bands"
+  ))
+```
+
+The plot above describes the probability (independent axis) of transition into the state defined in the facets, at a particular time in the infants life (dependent axis). Specifically, it describes the probability of occupying state $s \, (ARI(-) \, or \, ARI(+))$ at time $t + u$, conditionally on occupying state $r \, (ARI(-) \, or \, ARI(+))$ at time $u$. For these data, the top right corner describes the probability of being $ARI (+)$, at time $t + u$, given that the infant was in state $ARI (-)$ at time $t$. The probability of never having an ARI episode, throughout the course of infant life up to 52 weeks, decreases exponentially with time (top left corner: ARI(-) - ARI(-)). The probability of acquiring ARI episodes 
+
+```{r}
+prevalence.msm(markov1)
+```
+
+```{r, fig.width = 7, fig.height = 5}
+plot.prevalence.msm(markov1, legend.pos = c(0, 100))
+```
+
+The model fits a general trend line to our data that does not fit very well due to noise, it does capture the overall trend, however, it expects a faster build up in occupying the ARI (+) state (state 2, t=0 to t=10).
+
+```{r}
+plot(seq(1, 107, length.out = 11), 
+     as.numeric(prevalence.msm(markov1)$Observed[, 2]), 
+     type = "l",
+     xlab = "Infant Age (weeks)",
+     ylab = "Prevalence (%)",
+     ylim = c(0, 30))
+lines(seq(1, 107, length.out = 11), 
+      as.numeric(prevalence.msm(markov1)$Expected[, 2]),
+      type = "l", 
+      lty = 2)
+legend(0, 30, c("Observed", "Expected"), lty = c(2, 1))
+```
+
+### With Covariates
+
+> Sex
+
+```{r}
+states_cov <- demo %>%
+  select(id, hbov.pos, female, siblings) %>%
+  mutate(id = as.integer(id)) %>%
+  right_join(states, by = "id") %>%
+  arrange(id, weeks)
+
+markov2 <- msm(state ~ weeks,
+               subject = id,
+               covariates = ~female,
+               censor = 0,
+               data = states_cov,
+               qmatrix = crudeQ,
+               gen.inits = TRUE)
+markov2
+```
+
+```{r}
+hazard.msm(markov2)
+```
+
+Infant sex has no statistically significant bearing on rate of ARI incidence in this cohort (HR: 0.93, 95% CI: 0.78 - 1.10).
+
+> siblings
+
+```{r}
+markov3 <- msm(state ~ weeks,
+               subject = id,
+               covariates = ~siblings,
+               censor = 0,
+               data = states_cov,
+               qmatrix = crudeQ,
+               gen.inits = TRUE)
+markov3
+```
+
+```{r}
+hazard.msm(markov3)
+```
+
+Having siblings has no bearing on ARI incidence (HR: 1.08, 95% CI: 0.91 - 1.28)
+
+> Siblings and Sex
+
+```{r}
+markov4 <- msm(state ~ weeks,
+               subject = id,
+               covariates = ~female + siblings + female * siblings,
+               censor = 0,
+               data = states_cov,
+               qmatrix = crudeQ,
+               gen.inits = TRUE)
+markov4
+```
+
+```{r}
+hazard.msm(markov4)
+```
+
+One could argue that, given differences in behavior between males and females, contact with siblings could affect the rate of respiratory illnesses. Infants of this age may be too young to show these behavioral differences, explaining the lack of an effect here and in the model above (markov3).
+
+> Daycare Attendance
+
+```{r}
+markov5 <- msm(state ~ weeks,
+               subject = id,
+               covariates = ~daycare,
+               censor = 0,
+               data = states_cov,
+               qmatrix = crudeQ,
+               gen.inits = TRUE)
+markov5
+```
+
+```{r}
+hazard.msm(markov5)
+```
+
+Estimated transition intensity matrix and transition probability matrix for the first 30 weeks of infant life. For this infant cohort, Children first began daycare at a median age of 30 weeks (range: 6 - 87 weeks).
+
+Daycare attendance positively affects rate of ARI: daycare attendees are 1.76 times more lkely (76%) to experience an ARI episode.
+
+```{r}
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+
+# totals1 <- totlos.msm(markov5,
+#                       fromt = 0, tot = 52,
+#                       covariates = list(1),
+#                       ci = "bootstrap",
+#                       B = 100,
+#                       cores = 4)
+
+# saveRDS(totals1, "markov5_totals1.rds")
+totals1 <- readRDS("markov5_totals1.rds")
+
+# totals0 <- totlos.msm(markov5,
+#                       fromt = 1, tot = 52,
+#                       covariates = list(0),
+#                       ci = "bootstrap",
+#                       B = 100,
+#                       cores = 4)
+
+# saveRDS(totals0, "markov5_totals0.rds")
+totals0 <- readRDS("markov5_totals0.rds")
+```
+
+```{r}
+totals1
+```
+
+For those in daycare, the expected total duration of ARI episodes is 14.6 weeks (95% CI: 12.0 - 17.1 weeks), compare this with non-daycare attendees...
+
+```{r}
+totals0
+```
+
+where the estimated total duration of ARI episodes is 7.2 weeks (95% CI: 6.39 - 7.94).
+
+> Daycare and HBoV-1 shedding
+
+```{r}
+markov6 <- msm(state ~ weeks,
+               subject = id,
+               covariates = ~daycare + hbov.pos + daycare * hbov.pos,
+               censor = 0,
+               data = states_cov,
+               qmatrix = crudeQ,
+               gen.inits = TRUE)
+markov6
+```
+
+```{r}
+hazard.msm(markov6)
+```
+
+The carriage time of an ARI associated organism, Human Bocavirus 1, may confound the effect of daycare attendance on ARI incidence. Here, there is no significant interaction between daycare attendance and HBoV-1 shedding on the incidence of ARI (HR: 0.81, 95% CI: 0.52 - 1.26).
+
+> Playgroup Association
+
+```{r}
+markov7 <- msm(state ~ weeks,
+               subject = id,
+               covariates = ~playgrp,
+               censor = 0,
+               data = states_cov,
+               qmatrix = crudeQ,
+               gen.inits = TRUE)
+markov7
+```
+
+```{r}
+hazard.msm(markov7)
+```
+
+Infants in play groups (defined how?) are more at risk of incurring ARI episodes than infants not attending a play group by 24% (HR: 1.24, 95% CI: 1.05 - 1.47).
+
+> Playgroup and Daycare Attendance
+
+The correlation of daycare attendance and playgroup attendance are weakly correlated, so I can put them both in the model:
+
+```{r}
+tab <- xtabs(~day_care + play.group, data = demo)
+vcd::assocstats(tab)
+```
+
+Cramer's V - a strength of correlation estimation technique for categorical data - is 0.27, weakly correlated. If we look at the data time-series view of the Cramer's V, the correlation is very weak:
+
+```{r}
+tab <- xtabs(~daycare + playgrp, data = states_cov)
+vcd::assocstats(tab)
+```
+
+Subject-wise, it varys:
+
+```{r}
+tmp <- states_cov %>%
+  group_by(id) %>%
+  mutate(
+    pg = as.numeric(playgrp) - 1,
+    dc = as.numeric(daycare) - 1,
+    sumpg = sum(pg),
+    sumdc = sum(dc)
+  ) %>%
+  ungroup() %>%
+  filter(sumpg != 0 & sumdc != 0) %>%
+  select(id, playgrp, daycare)
+# length(unique(tmp$id))
+# only 15
+
+fcor <- function(df) {
+  tab <- xtabs(~daycare + playgrp, data = df)
+  return(data.frame(COR = vcd::assocstats(tab)$cramer))
+}
+
+plyr::ddply(tmp, "id", fcor) %>%
+  mutate(id = factor(id)) %>%
+  ggplot() %>%
+  add(geom_linerange(aes(x = id, ymin = 0, ymax = COR))) %>%
+  add(geom_hline(yintercept = 0.5, color = 'red')) %>%
+  add(theme_trueMinimal()) %>%
+  add(coord_flip()) %>%
+  add(labs(y = "\nCorrelation, daycare vs. playgroup attendance"))
+```
+
+Only 15 individuals attended a daycare and engaged in playgroup activities at the same time and the correlations were only strong for 5 infants.
+
+```{r}
+markov8 <- msm(state ~ weeks,
+               subject = id,
+               covariates = ~playgrp + daycare + playgrp * daycare,
+               censor = 0,
+               data = states_cov,
+               qmatrix = crudeQ,
+               gen.inits = TRUE)
+markov8
+```
+
+```{r}
+hazard.msm(markov8)
+```
+
+Attending daycare while also engaging in play groups during that same week has no statistically signficant affect on ARI incidence (HR: 0.7, 95% CI: 0.48 - 1.02), After adjustment, daycare attendance and playgroup engagement affect the rate of ARI with similar strengths of association and variance as their respective models, alone.
+
+```{r, fig.width = 7, fig.height = 7}
+plot.prevalence.msm(markov8, legend.pos = c(20, 100))
+```
+
+This model provides better fit ($-2logLik = 6197$ compare to base model $-2logLik = 6294$) and estimates prevalences much better. The model still inaccurately estimates the early onset ARI episodes.
+
+Comparing sojourn times between levels of daycare and playgroup attendance:
+
+Without daycare or playgroup attendance:
+
+```{r}
+sojourn.msm(markov8, covariates = list(daycare = 0, playgrp = 0))
+```
+
+In daycare, but not participating in play groups
+
+```{r}
+sojourn.msm(markov8, covariates = list(daycare = 1, playgrp = 0))
+```
+
+Participating in a play group but not attending daycare
+
+```{r}
+sojourn.msm(markov8, covariates = list(daycare = 0, playgrp = 1))
+```
+
+Attending a daycare and participating in a play group
+
+```{r}
+sojourn.msm(markov8, covariates = list(daycare = 1, playgrp = 1))
+```
+
+```{r}
+cov.list <- list(list(daycare = 0, playgrp = 0),
+                 list(daycare = 1, playgrp = 0),
+                 list(daycare = 0, playgrp = 1),
+                 list(daycare = 1, playgrp = 1))
+
+sojourn.df <- data.frame(
+  set = c("No daycare, No playgroup",
+          "Daycare, No playgroup", 
+          "No daycare, Playgroup", 
+          "Daycare, Playgroup"), 
+  estimates = rep(NA, 4),
+  L = rep(NA, 4), 
+  U = rep(NA, 4)
+  )
+
+# for (i in 1:length(cov.list)) {
+#   sojourn <- sojourn.msm(markov8, 
+#                          covariates = cov.list[[i]], 
+#                          ci = "bootstrap",
+#                          B = 100)
+#   sojourn.df[i, 2] <- sojourn[2, 1]
+#   sojourn.df[i, 3] <- sojourn[2, 3]
+#   sojourn.df[i, 4] <- sojourn[2, 4]
+# }
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+# saveRDS(sojourn.df, "full_sojourn.rds")
+sojourn.df <- readRDS("full_sojourn.rds")
+
+sojourn.df
+
+detach('package:msm')
+```
+
+```{r, fig.width = 10, fig.height = 6}
+levs <- c("No daycare, No playgroup",
+          "Daycare, No playgroup",
+          "No daycare, Playgroup",
+          "Daycare, Playgroup")
+
+sojourn.df %>%
+  mutate(set = factor(set, levels = levs)) %>%
+  ggplot(aes(set)) %>%
+  add(geom_point(aes(y = estimates), size = 3)) %>%
+  add(geom_errorbar(aes(ymin = L, ymax = U), width = 0.2)) %>%
+  add(theme_trueMinimal(16)) %>%
+  add(labs(
+    x = "\n Daycare Attendance and Playgroup Activity",
+    y = "Estimated Sojourn Time (weeks) in ARI episodes \n"
+  ))
+```
+
+## Recurrent Events Approach
+
+```{r}
+recur <- states_cov %>%
+  filter(ill == 1) %>%
+  select(-firstobs, -state)
+
+dim(recur)
+```
+
+```{r}
+states_cov %>%
+  filter(ill == 1) %>%
+  select(id) %>%
+  table() %>%
+  data.frame() %>%
+  summarise(n = n(),
+            mean = mean(Freq),
+            sd = sd(Freq),
+            median = median(Freq),
+            min = min(Freq),
+            max = max(Freq))
+```
+
+The median number of ARI episodes is 16.4, ranging from 1 episode to 46 episodes
+
+```{r}
+recur <- states_cov %>%
+  group_by(id) %>%
+  mutate(last = row_number() == n()) %>%
+  filter(last | ill == 1) %>%
+  mutate(
+    t.stop = weeks,
+    t.start = lag(t.stop),
+    t.start = ifelse(is.na(t.start), 0, t.start),
+    time = t.stop - t.start
+  ) %>%
+  select(-firstobs, -sum, -state, -last) %>%
+  ungroup() %>%
+  data.frame()
+```
+
+Shared frailty model:
+
+The hazard function, conditional on the shared frailty term $\omega_j$
+
+$$\lambda_{ij}(t|\omega_j)=\lambda_0(t)_i \omega_j \exp(\beta^\prime X_{ij})$$
+
+Where $X_{ij}$ could be time-varying $X_{ij}(t)$ (eg. daycare and playgroup) 
+
+```{r}
+library(frailtypack)
+
+recur.mod1 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + daycare,
+                           recurrentAG = TRUE,
+                           data = recur,
+                           hazard = "Weibull")
+recur.mod1
+```
+
+The output states the parameters of the Weibull hazard function are $\Theta = \left\{\alpha, \gamma \right\}=\left\{1.54, 17.02\right\}$
+
+```{r}
+plot(density(rweibull(1500, shape = 1.54, scale = 17.02)))
+```
+
+The baseline Weibull hazard function, $\lambda(t) = \alpha t^{\alpha - 1}/\gamma^\alpha$
+
+```{r}
+plot(recur.mod1, color = 1)
+```
+
+and survival function $S(t) = e^{-(t / \gamma)^\alpha}$
+
+```{r}
+plot(recur.mod1, type.plot = "Survival", conf.bands = TRUE, color = 1)
+```
+
+Semiparametric shared frailty with spline fit hazard function
+
+```{r}
+recur.mod2 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + daycare,
+                           recurrentAG = TRUE,
+                           n.knots = 5,
+                           kappa = 10000,
+                           data = recur,
+                           cross.validation = TRUE,
+                           hazard = "Splines")
+recur.mod2
+```
+
+```{r}
+summary(recur.mod2)
+```
+
+Hazard function
+
+```{r}
+plot(recur.mod2, color = 1)
+```
+
+Survival curve
+
+```{r}
+plot(recur.mod2, type.plot = "Survival", conf.bands = TRUE, color = 1)
+```
+
+The second model provides a slightly better fit
+
+Concordance measures
+
+```{r}
+mod2Cmeas <- Cmeasures(recur.mod2)
+
+mod2Cmeas
+```
+
+Predictions can be done in two ways,
+
+1. Marginal predictive probability of event between t and horizon time t + w, averaged    over the population:
+
+$$P^{marg}(t, t+w)=\frac{\int_0^{+\infty}(S_{i(J+1)}(t|u_i) - S_{ij}(t+w|u_i)(u_i)^J S_{ij}(X_{iJ}|u_i)g(u)du}{\int_0^{+\infty}S_{i(J+1)}(t|u_i)(u_i)^J S_{i(J+1)}(X_{iJ}|u_i)g(u)du}$$
+2. A conditional predictive probability of event between $t$ and horizon time $t+w$, give a specific individual.
+
+$$P^{cond}(t, t+w) = \frac{S_{ij}(t|\eta_i) - S_{ij}(t+w|\eta_i)}{S_{ij}(t|\eta_i)} = 1 - \left\{\frac{S_0(t+w)}{S_0(t)} \right\}^{exp(\eta_i + \beta^{\prime}Z_{ij})}$$
+
+```{r}
+datapred <- data.frame(daycare = 1)
+datapred$daycare <- as.factor(datapred$daycare)
+levels(datapred$daycare) <- c(0, 1)
+datapred[1, ] <- 0
+datapred[2, ] <- 1
+```
+
+## Changepoint Analysis
+
+Infants enter daycare at the - seemingly random - behest of their guardians. As methods have not been widely developed for longitudinal data with random changepoints, the idea here is to base the timing of life on the week children enter daycare, week 0, and count backward and forward from there. The interest lies on entry into daycare and the experience while in daycare, not the exit and so the data have been truncated to the end of daycare attendance.
+
+```{r}
+chng.df <- diary %>%
+  filter(daycare == 1) %>%
+  group_by(id) %>%
+  mutate(
+    first = row_number() == 1, 
+    last = row_number() == n()
+    ) %>%
+  filter(first | last) %>%
+  select(id, stdy_wk) %>%
+  mutate(
+    timevar = row_number(),
+    timevar = ifelse(timevar == 1, "start", "finish")
+    ) %>%
+  ungroup() %>%
+  spread(key = timevar, value = stdy_wk) %>%
+  full_join(states_cov %>% mutate(id = as.character(id)), by = "id") %>%
+  filter(!is.na(start) & weeks <= finish) %>%
+  mutate(time = weeks - start) %>%
+  select(-finish, -week, -sum, -weeks, -firstobs, -state)
+``` 
+
+The timing of the daycare attendance varies wildly...
+
+```{r}
+chng.df %>%
+  distinct(id, start) %>%
+  ggplot(aes(x = start)) %>%
+  add(geom_histogram(color = "black")) %>%
+  add(theme_trueMinimal(16)) %>%
+  add(labs(
+    x = "Daycare Start, Week of Infant Life",
+    y = "Frequency"
+  ))
+```
+
+```{r}
+tmp <- chng.df %>% distinct(id, start)
+psych::describe(tmp$start)
+```
+
+...ranging from 6 to 87 weeks. The median being 31 weeks.
+
+The approach here is to model ARI incidence using a mixed-model and making a changepoint at t = 0. Mixed-models extend to piece-wise models simply through allowing a random/varying intercept and slope at the changepoint. The model used here is a bernoulli model with a logit link for ARI incidence,
+
+$$
+y = \left\{
+        \begin{array}{ll}
+            1 & \quad ARI (+) \\
+            0 & \quad ARI (-)
+        \end{array}
+    \right.
+$$
+
+The model takes this form,
+
+$$\eta_{ij} = (\beta_0 + u_{0j}) + \beta Z_{ij} + e_{ij}\quad i=1,...,n, j = 1,...,m$$
+Where each of $n$ individuals, $i$, experience $m$ time points, $j$. $u_{0j}$ denote random intercepts for each individual, $\left\{Z_{ij}\right\}_{i=1}^n$ represent any covariates of interest and $e_{ij}$ are residual errors for each individual. $\eta_{ij}$ denotes the linear predictor which is related to $Y$ (defined above) through the $logit$ link $g(E(y)) = \eta$, 
+
+$$\log \left\{\frac{E[y]}{1-E[y]}\right\} = \eta$$
+
+The broken-stick at $t=0$ comes in through an additional covariate,
+
+$$\eta_{ij} = (\beta_0 + u_{0j}) + \beta Z_{ij} + \beta_cI(t \ge 0) + e_{ij}$$
+
+Where $\beta_c$ could take the form of a random intercept or slope.
+
+> Daycare + Start Age
+
+```{r, fig.height = 8, fig.width = 8}
+library(brms)
+library(rstan)
+theme_set(theme_trueMinimal())
+
+# brmmod1 <- brm(ill ~ time:daycare + start + (1 | id),
+#                prior = c(set_prior ("normal (0, 5)", class = "b")),
+#                data = chng.df,
+#                family = bernoulli,
+#                cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+# saveRDS(brmmod1, "brm_dc_start.rds")
+brmmod1 <- readRDS("brm_dc_start.rds")
+
+plot(brmmod1)
+```
+
+All chains mix well and parameters are identifiable
+
+```{r}
+summary(brmmod1)
+exp(fixef(brmmod1))
+```
+
+```{r}
+pp_check(brmmod1)
+```
+
+Posterior predictive check shows a well fitting model
+
+```{r}
+plot(marginal_effects(brmmod1), points = TRUE, newpage = FALSE, ask = FALSE)
+```
+
+The second plot doesn't make much sense as daycare attendance before time = 0 cannot happen, by definition.
+
+```{r}
+set1 <- RColorBrewer::brewer.pal(9, "Set1")
+
+pframe <- data.frame(
+  time = seq(-86, 91, by = 1),
+  start = mean(chng.df$start)
+  )
+
+pframe <- transform(pframe, daycare = factor(ifelse(time >= 0, 1, 0)))
+
+prediction <- data.frame(
+  predict(brmmod1, 
+          newdata = pframe, 
+          re_formula = NA, 
+          type = "response")
+  )
+
+pframe <- cbind(pframe, prediction)
+
+colnames(pframe) <- c("time", "start", "daycare", "ill", "SE", "LB", "UB")
+
+chng.df %>%
+  ggplot(aes(time, ill, group = id)) %>%
+  add(geom_line(alpha = 0.2)) %>%
+  add(geom_line(data = pframe, aes(group = NA), color = set1[1])) %>%
+  add(geom_vline(xintercept = 0, lty = 2)) %>%
+  add(theme_trueMinimal(16)) %>%
+  add(labs(
+    x = "Standardized Study Time, Weeks",
+    y = "Probability of ARI"
+  ))
+```
+
+The red-line is the prediction from the model, with a changepoint at 0 for time of daycare entrance.
+
+> Daycare + Start Age + Sex
+
+```{r}
+# brmmod2 <- brm(ill ~ time:daycare + start + female + (1 | id),
+#                prior = c(set_prior ("normal (0, 5)", class = "b")),
+#                data = chng.df,
+#                family = bernoulli,
+#                cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+# saveRDS(brmmod2, "brm_dc_start_sex.rds")
+brmmod2 <- readRDS("brm_dc_start_sex.rds")
+
+summary(brmmod2)
+exp(fixef(brmmod2))
+```
+
+> Daycare + Start Age + siblings
+
+```{r}
+# brmmod3 <- brm(ill ~ time:daycare + start + siblings + (1 | id),
+#                prior = c(set_prior ("normal (0, 5)", class = "b")),
+#                data = chng.df,
+#                family = bernoulli,
+#                cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+# saveRDS(brmmod3, "brm_dc_start_sibs.rds")
+brmmod3 <- readRDS("brm_dc_start_sibs.rds")
+
+summary(brmmod3)
+exp(fixef(brmmod3))
+```
+
+```{r}
+pframe1 <- data.frame(time = seq(-86, 91, by = 1),
+                      start = mean(chng.df$start),
+                      siblings = 1)
+
+pframe0 <- data.frame(time = seq(-86, 91, by = 1), 
+                      start = mean(chng.df$start),
+                      siblings = 0)
+
+pframe1 <- transform(pframe1, daycare = factor(ifelse(time >= 0, 1, 0)))
+pframe0 <- transform(pframe0, daycare = factor(ifelse(time >= 0, 1, 0)))
+
+prediction1 <- data.frame(
+  predict(brmmod3, 
+          newdata = pframe1, 
+          re_formula = NA, 
+          type = "response")
+  )
+
+prediction0 <- data.frame(
+  predict(brmmod3, 
+          newdata = pframe0, 
+          re_formula = NA, 
+          type = "response")
+  )
+
+pframe1 <- cbind(pframe1, prediction1)
+pframe0 <- cbind(pframe0, prediction0)
+
+names <- c("time", "start", "siblings", "daycare", "ill",  "SE",  "LB", "UB")
+colnames(pframe1) <- names
+colnames(pframe0) <- names
+
+chng.df %>%
+  ggplot(aes(time, ill, group = id)) %>%
+  add(geom_line(alpha = 0.2)) %>%
+  add(geom_line(data = pframe1, aes(group = NA, color = "HH Siblings"))) %>%
+  add(geom_line(data = pframe0, aes(group = NA, color = "No HH Siblings"))) %>%
+  add(geom_vline(xintercept = 0, lty = 2)) %>%
+  add(theme_trueMinimal(16)) %>%
+  add(theme(legend.position = "top")) %>%
+  add(labs(
+    x = "Standardized Study Time, Weeks",
+    y = "Probability of ARI"
+  )) %>%
+  add(scale_color_manual(
+    name = "",
+    values = c(set1[1], set1[2])
+  ))
+```
+
+> Daycare + Start Age + HBoV-1 carry
+
+```{r}
+# brmmod4 <- brm(ill ~ time:daycare + start + hbov.pos + (1 | id),
+#                data = chng.df,
+#                family = bernoulli,
+#                cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+# saveRDS(brmmod4, "brm_dc_start_boca.rds")
+brmmod4 <- readRDS("brm_dc_start_boca.rds")
+
+summary(brmmod4)
+exp(fixef(brmmod4))
+```
+
+> Daycare + Start Age + Play Group Activity
+
+```{r}
+# brmmod5 <- brm(ill ~ time:daycare + start + playgrp + (1 | id),
+#                data = chng.df,
+#                family = bernoulli,
+#                cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+# saveRDS(brmmod5, "brm_dc_start_pg.rds")
+brmmod5 <- readRDS("brm_dc_start_pg.rds")
+
+summary(brmmod5)
+exp(fixef(brmmod5))
+```
+
+```{r}
+pframe1 <- data.frame(time = seq(-86, 91, by = 1),
+                      start = mean(chng.df$start),
+                      playgrp = 1)
+
+pframe0 <- data.frame(time = seq(-86, 91, by = 1), 
+                      start = mean(chng.df$start),
+                      playgrp = 0)
+
+pframe1 <- transform(pframe1, daycare = factor(ifelse(time >= 0, 1, 0)))
+pframe0 <- transform(pframe0, daycare = factor(ifelse(time >= 0, 1, 0)))
+
+prediction1 <- data.frame(
+  predict(brmmod5, 
+          newdata = pframe1, 
+          re_formula = NA, 
+          type = "response")
+  )
+
+prediction0 <- data.frame(
+  predict(brmmod5, 
+          newdata = pframe0, 
+          re_formula = NA, 
+          type = "response")
+  )
+
+pframe1 <- cbind(pframe1, prediction1)
+pframe0 <- cbind(pframe0, prediction0)
+
+names <- c("time", "start", "playgrp", "daycare", "ill",  "SE",  "LB", "UB")
+colnames(pframe1) <- names
+colnames(pframe0) <- names
+
+chng.df %>%
+  ggplot(aes(time, ill, group = id)) %>%
+  add(geom_line(alpha = 0.2)) %>%
+  add(geom_line(data = pframe1, aes(group = NA, color = "Playgroup"))) %>%
+  add(geom_line(data = pframe0, aes(group = NA, color = "No Playgroup"))) %>%
+  add(geom_vline(xintercept = 0, lty = 2)) %>%
+  add(theme_trueMinimal(16)) %>%
+  add(theme(legend.position = "top")) %>%
+  add(labs(
+    x = "Standardized Study Time, Weeks",
+    y = "Probability of ARI"
+  )) %>%
+  add(scale_color_manual(
+    name = "",
+    values = c(set1[1], set1[2])
+  ))
+```
+
+> Daycare + Start Age + Random Slope
+
+```{r}
+# brmmod6 <- brm(ill ~ time:daycare + start + (1 + time | id),
+#                data = chng.df,
+#                family = bernoulli,
+#                cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+# saveRDS(brmmod6, "brm_dc_start_ranslope.rds")
+brmmod6 <- readRDS("brm_dc_start_ranslope.rds")
+
+summary(brmmod6)
+exp(fixef(brmmod6))
+```
+
+```{r}
+pframe <- data.frame(
+  time = seq(-86, 91, by = 1),
+  start = mean(chng.df$start)
+  )
+
+pframe <- transform(pframe, daycare = factor(ifelse(time >= 0, 1, 0)))
+
+prediction <- data.frame(
+  predict(brmmod1, 
+          newdata = pframe, 
+          re_formula = NA, 
+          type = "response")
+  )
+
+pframe <- cbind(pframe, prediction)
+
+colnames(pframe) <- c("time", "start", "daycare", "ill", "SE", "LB", "UB")
+
+chng.df %>%
+  ggplot(aes(time, ill, group = id)) %>%
+  add(geom_line(alpha = 0.2)) %>%
+  add(geom_line(data = pframe, aes(group = NA), color = set1[1])) %>%
+  add(geom_vline(xintercept = 0, lty = 2)) %>%
+  add(theme_trueMinimal(16)) %>%
+  add(labs(
+    x = "Standardized Study Time, Weeks",
+    y = "Probability of ARI"
+  ))
+```
+
+> Daycare + Start Age + Sex + Random Slope
+
+```{r}
+# brmmod7 <- brm(ill ~ time:daycare + start + female + (1 + time | id),
+#                prior = c(set_prior ("normal (0, 5)", class = "b")),
+#                data = chng.df,
+#                family = bernoulli,
+#                cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+# saveRDS(brmmod7, "brm_dc_start_sex_rans.rds")
+brmmod7 <- readRDS("brm_dc_start_sex_rans.rds")
+
+summary(brmmod7)
+exp(fixef(brmmod7))
+```
+
+> Daycare + Start Age + Siblings + Random Slope
+
+```{r}
+# brmmod8 <- brm(ill ~ time:daycare + start + siblings + (1 + time | id),
+#                data = chng.df,
+#                family = bernoulli,
+#                cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+# saveRDS(brmmod8, "brm_dc_start_sibs_rans.rds")
+brmmod8 <- readRDS("brm_dc_start_sibs_rans.rds")
+
+summary(brmmod8)
+exp(fixef(brmmod8))
+```
+
+> Daycare + Start Age + HBoV-1 carry + Random Slopes
+
+```{r}
+# brmmod9 <- brm(ill ~ time:daycare + start + hbov.pos + (1 + time | id),
+#                data = chng.df,
+#                family = bernoulli,
+#                cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+# saveRDS(brmmod9, "brm_dc_start_boca_rans.rds")
+brmmod9 <- readRDS("brm_dc_start_boca_rans.rds")
+
+summary(brmmod9)
+exp(fixef(brmmod9))
+```
+
+> Daycare + Start Age + Play Group Activity
+
+```{r}
+# brmmod10 <- brm(ill ~ time:daycare + start + playgrp + (1 | id),
+#                 data = chng.df,
+#                 family = bernoulli,
+#                 cores = 4)
+
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+# saveRDS(brmmod10, "brm_dc_start_pg_rans.rds")
+brmmod10 <- readRDS("brm_dc_start_pg_rans.rds")
+
+summary(brmmod10)
+exp(fixef(brmmod10))
+```
+
+```{r}
+pframe1 <- data.frame(time = seq(-86, 91, by = 1),
+                      start = mean(chng.df$start),
+                      playgrp = 1)
+
+pframe0 <- data.frame(time = seq(-86, 91, by = 1), 
+                      start = mean(chng.df$start),
+                      playgrp = 0)
+
+pframe1 <- transform(pframe1, daycare = factor(ifelse(time >= 0, 1, 0)))
+pframe0 <- transform(pframe0, daycare = factor(ifelse(time >= 0, 1, 0)))
+
+prediction1 <- data.frame(
+  predict(brmmod10, 
+          newdata = pframe1, 
+          re_formula = NA, 
+          type = "response")
+  )
+
+prediction0 <- data.frame(
+  predict(brmmod10, 
+          newdata = pframe0, 
+          re_formula = NA, 
+          type = "response")
+  )
+
+pframe1 <- cbind(pframe1, prediction1)
+pframe0 <- cbind(pframe0, prediction0)
+
+names <- c("time", "start", "playgrp", "daycare", "ill",  "SE",  "LB", "UB")
+colnames(pframe1) <- names
+colnames(pframe0) <- names
+
+chng.df %>%
+  ggplot(aes(time, ill, group = id)) %>%
+  add(geom_line(alpha = 0.2)) %>%
+  add(geom_line(data = pframe1, aes(group = NA, color = "Playgroup"))) %>%
+  add(geom_line(data = pframe0, aes(group = NA, color = "No Playgroup"))) %>%
+  add(geom_vline(xintercept = 0, lty = 2)) %>%
+  add(theme_trueMinimal(16)) %>%
+  add(theme(legend.position = "top")) %>%
+  add(labs(
+    x = "Standardized Study Time, Weeks",
+    y = "Probability of ARI"
+  )) %>%
+  add(scale_color_manual(
+    name = "",
+    values = c(set1[1], set1[2])
+  ))
+```
+
+# Misc. Functons
+
+```{r, echo = TRUE, eval = FALSE}
+# true minimal theme
+theme_trueMinimal <- function(base_size = 16, base_family = "") {
+    theme_bw(base_size = base_size, base_family = base_family) %+replace% 
+        theme(axis.ticks = element_blank(), 
+              legend.background = element_blank(), 
+              legend.key = element_blank(), 
+              panel.background = element_blank(), 
+              strip.background = element_blank(), 
+              panel.border = element_blank(),
+              panel.grid.major = element_blank(), 
+              panel.grid.minor = element_blank(),
+              plot.background = element_blank(), 
+              axis.line = element_line(), 
+              axis.line.y = element_blank(),
+              complete = TRUE)
+}
+
+pmat_sim <- function(model,
+                     iterations,
+                     levels = NULL, 
+                     labels = NULL) {
+  require(dplyr)
+  df_list <- list()
+  for (i in 1:iterations) {
+    pmat <- pmatrix.msm(markov1, ci = "normal", t = i, cl = 0.95)
+    estimates <- as.data.frame(as.table(pmat$estimates))
+    colnames(estimates) <- c("From", "To", "P_rs")
+    UB <- as.data.frame(as.table(pmat$U))
+    LB <- as.data.frame(as.table(pmat$L))
+    estimates$UB <- UB$Freq
+    estimates$LB <- LB$Freq
+    estimates$time <- as.numeric(i)
+    df_list[[i]] <- estimates
+  } # end for
+  df <- bind_rows(df_list)
+  if (!is.null(levels)) {
+    df <- df %>% 
+      mutate(
+        transition = paste(From, To, sep = " - "),
+        transition = factor(transition,
+                            levels = levels,
+                            labels = labels)
+      ) %>%
+      select(-From, -To)
+  } # end if
+  return(df)
+}
+```
+
+# References
