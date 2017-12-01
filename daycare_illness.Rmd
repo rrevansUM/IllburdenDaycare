@@ -1067,7 +1067,26 @@ summary(recur.mod4)
 > Playgroup Activity
 
 ```{r}
+recur.mod5 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + playgrp,
+                           recurrentAG = TRUE,
+                           n.knots = 5,
+                           kappa = 10000,
+                           data = recur,
+                           hazard = "Splines")
+recur.mod5
+summary(recur.mod5)
+```
 
+```{r}
+recur.mod6 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + 
+                             playgrp + daycare,
+                           recurrentAG = TRUE,
+                           n.knots = 5,
+                           kappa = 10000,
+                           data = recur,
+                           hazard = "Splines")
+recur.mod6
+summary(recur.mod6)
 ```
 
 ## Changepoint Analysis
