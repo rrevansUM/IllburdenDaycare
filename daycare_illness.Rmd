@@ -59,8 +59,8 @@ library(ggthemes)
 # Load Data
 
 ```{r}
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata")
-# setwd("S:/MartinEpi/Analysis/Bocavirus Persistence Modeling/Rdata/")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/")
 
 files <- list.files(pattern = "*.rds")
 file_names <- gsub(".rds", "", files)
@@ -214,7 +214,7 @@ sapply(diary[, c(3:7, 9, 10)], table)
 
 Visualize illness chains
 
-```{r}
+```{r, fig.width = 6, fig.height = 4}
 some_ids <- sample(unique(diary$id), 4, replace = FALSE)
 diary %>%
   filter(id %in% some_ids) %>%
@@ -231,7 +231,7 @@ diary %>%
   ))
 ```
 
-```{r}
+```{r, fig.width = 6, fig.height = 4}
 some_ids <- sample(unique(diary$id), 4, replace = FALSE)
 diary %>%
   filter(id %in% some_ids) %>%
@@ -272,12 +272,12 @@ diary %>%
   add(geom_point()) %>%
   add(geom_line()) %>%
   add(geom_rect(data = dc_times, 
-                aes(x = NULL, y = NULL,
-                    xmin = xmin, 
+                aes(xmin = xmin, 
                     xmax = xmax,
                     ymin = -Inf, 
                     ymax = Inf),
-                alpha = 0.3)) %>%
+                alpha = 0.3,
+                inherit.aes = FALSE)) %>%
   add(facet_wrap(~id)) %>%
   add(theme_trueMinimal()) %>%
   add(scale_y_continuous(breaks = c(0, 1))) %>%
@@ -462,7 +462,8 @@ The total duration in any particular state can be estimated with bootstrapped er
 #                      B = 100,
 #                      cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
 # saveRDS(totals, "markov1_totals52.rds")
 totals <- readRDS("markov1_totals52.rds")
 
@@ -539,7 +540,8 @@ All infants exit the study (END is an absorbing state), i.e. in the above plot, 
 Probabilities for the first year of life (52 weeks)
 
 ```{r, fig.width = 7, fig.height = 7}
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
 # pmat <- pmat_sim(markov1, 52, levels = Qlevels, labels = Qlabels)
 # saveRDS(pmat, "markov1_pmat52.rds")
 pmat <- readRDS("markov1_pmat52.rds")
@@ -578,7 +580,7 @@ prevalence.msm(markov1)
 plot.prevalence.msm(markov1, legend.pos = c(0, 100))
 ```
 
-The model fits a general trend line to our data that does not fit very well due to noise, it does capture the overall trend, however, it expects a faster build up in occupying the ARI (+) state (state 2, t=0 to t=10).
+The model fits a general trend line to our data that does not fit very well, it does capture the overall trend, however, it expects a faster build up in occupying the ARI (+) state (state 2, t=0 to t=10).
 
 ```{r}
 plot(seq(1, 107, length.out = 11), 
@@ -681,7 +683,8 @@ Estimated transition intensity matrix and transition probability matrix for the 
 Daycare attendance positively affects rate of ARI: daycare attendees are 1.76 times more lkely (76%) to experience an ARI episode.
 
 ```{r}
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
 
 # totals1 <- totlos.msm(markov5,
 #                       fromt = 0, tot = 52,
@@ -798,8 +801,7 @@ plyr::ddply(tmp, "id", fcor) %>%
   add(geom_linerange(aes(x = id, ymin = 0, ymax = COR))) %>%
   add(geom_hline(yintercept = 0.5, color = 'red')) %>%
   add(theme_trueMinimal()) %>%
-  add(coord_flip()) %>%
-  add(labs(y = "\nCorrelation, daycare vs. playgroup attendance"))
+  add(labs(y = "\nCorrelation \n Daycare vs. Playgroup attendance"))
 ```
 
 Only 15 individuals attended a daycare and engaged in playgroup activities at the same time and the correlations were only strong for 5 infants.
@@ -821,7 +823,7 @@ hazard.msm(markov8)
 
 Attending daycare while also engaging in play groups during that same week has no statistically signficant affect on ARI incidence (HR: 0.7, 95% CI: 0.48 - 1.02), After adjustment, daycare attendance and playgroup engagement affect the rate of ARI with similar strengths of association and variance as their respective models, alone.
 
-```{r, fig.width = 7, fig.height = 7}
+```{r, fig.width = 7, fig.height = 4}
 plot.prevalence.msm(markov8, legend.pos = c(20, 100))
 ```
 
@@ -879,7 +881,8 @@ sojourn.df <- data.frame(
 #   sojourn.df[i, 4] <- sojourn[2, 4]
 # }
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
 # saveRDS(sojourn.df, "full_sojourn.rds")
 sojourn.df <- readRDS("full_sojourn.rds")
 
@@ -992,8 +995,8 @@ recur.mod2 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + daycare,
                            n.knots = 5,
                            kappa = 10000,
                            data = recur,
-                           cross.validation = TRUE,
-                           hazard = "Splines")
+                           hazard = "Splines",
+                           cross.validation = TRUE)
 recur.mod2
 ```
 
@@ -1001,43 +1004,70 @@ recur.mod2
 summary(recur.mod2)
 ```
 
-Hazard function
+Hazard and survival function
 
-```{r}
+```{r, fig.width = 7, fig.height = 4}
+par(mfrow = c(1, 2))
 plot(recur.mod2, color = 1)
-```
-
-Survival curve
-
-```{r}
 plot(recur.mod2, type.plot = "Survival", conf.bands = TRUE, color = 1)
 ```
 
-The second model provides a slightly better fit
+### Stratified
 
-Concordance measures
+> Stratified by sex
 
 ```{r}
-mod2Cmeas <- Cmeasures(recur.mod2)
+strat.mod3 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + 
+                             + strata(female) + daycare,
+                           recurrentAG = TRUE,
+                           n.knots = 5,
+                           kappa = c(10000, 10000),
+                           data = recur,
+                           hazard = "Splines")
 
-mod2Cmeas
+recur.mod3 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + 
+                             + female + daycare + female * daycare,
+                           recurrentAG = TRUE,
+                           n.knots = 5,
+                           kappa = 10000,
+                           data = recur,
+                           hazard = "Splines")
 ```
 
-Predictions can be done in two ways,
+```{r}
+recur.mod3
+summary(recur.mod3)
+```
 
-1. Marginal predictive probability of event between t and horizon time t + w, averaged    over the population:
-
-$$P^{marg}(t, t+w)=\frac{\int_0^{+\infty}(S_{i(J+1)}(t|u_i) - S_{ij}(t+w|u_i)(u_i)^J S_{ij}(X_{iJ}|u_i)g(u)du}{\int_0^{+\infty}S_{i(J+1)}(t|u_i)(u_i)^J S_{i(J+1)}(X_{iJ}|u_i)g(u)du}$$
-2. A conditional predictive probability of event between $t$ and horizon time $t+w$, give a specific individual.
-
-$$P^{cond}(t, t+w) = \frac{S_{ij}(t|\eta_i) - S_{ij}(t+w|\eta_i)}{S_{ij}(t|\eta_i)} = 1 - \left\{\frac{S_0(t+w)}{S_0(t)} \right\}^{exp(\eta_i + \beta^{\prime}Z_{ij})}$$
+> Stratification by siblings
 
 ```{r}
-datapred <- data.frame(daycare = 1)
-datapred$daycare <- as.factor(datapred$daycare)
-levels(datapred$daycare) <- c(0, 1)
-datapred[1, ] <- 0
-datapred[2, ] <- 1
+strat.mod4 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + 
+                             + strata(siblings) + daycare,
+                           recurrentAG = TRUE,
+                           n.knots = 5,
+                           kappa = c(10000, 10000),
+                           data = recur,
+                           hazard = "Splines")
+
+recur.mod4 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + 
+                             + siblings + daycare + siblings * daycare,
+                           recurrentAG = TRUE,
+                           n.knots = 5,
+                           kappa = 10000,
+                           data = recur,
+                           hazard = "Splines")
+```
+
+```{r}
+recur.mod4
+summary(recur.mod4)
+```
+
+> Playgroup Activity
+
+```{r}
+
 ```
 
 ## Changepoint Analysis
