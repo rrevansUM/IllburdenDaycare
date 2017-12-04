@@ -59,8 +59,8 @@ library(ggthemes)
 # Load Data
 
 ```{r}
-# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata")
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/")
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata")
+# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/")
 
 files <- list.files(pattern = "*.rds")
 file_names <- gsub(".rds", "", files)
@@ -462,8 +462,8 @@ The total duration in any particular state can be estimated with bootstrapped er
 #                      B = 100,
 #                      cores = 4)
 
-# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
 # saveRDS(totals, "markov1_totals52.rds")
 totals <- readRDS("markov1_totals52.rds")
 
@@ -540,8 +540,8 @@ All infants exit the study (END is an absorbing state), i.e. in the above plot, 
 Probabilities for the first year of life (52 weeks)
 
 ```{r, fig.width = 7, fig.height = 7}
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
-# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
 # pmat <- pmat_sim(markov1, 52, levels = Qlevels, labels = Qlabels)
 # saveRDS(pmat, "markov1_pmat52.rds")
 pmat <- readRDS("markov1_pmat52.rds")
@@ -683,8 +683,8 @@ Estimated transition intensity matrix and transition probability matrix for the 
 Daycare attendance positively affects rate of ARI: daycare attendees are 1.76 times more lkely (76%) to experience an ARI episode.
 
 ```{r}
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
-# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
 
 # totals1 <- totlos.msm(markov5,
 #                       fromt = 0, tot = 52,
@@ -881,8 +881,8 @@ sojourn.df <- data.frame(
 #   sojourn.df[i, 4] <- sojourn[2, 4]
 # }
 
-# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
 # saveRDS(sojourn.df, "full_sojourn.rds")
 sojourn.df <- readRDS("full_sojourn.rds")
 
@@ -975,15 +975,11 @@ The output states the parameters of the Weibull hazard function are $\Theta = \l
 plot(density(rweibull(1500, shape = 1.54, scale = 17.02)))
 ```
 
-The baseline Weibull hazard function, $\lambda(t) = \alpha t^{\alpha - 1}/\gamma^\alpha$
+The baseline Weibull hazard function, $\lambda(t) = \alpha t^{\alpha - 1}/\gamma^\alpha$ and survival function $S(t) = e^{-(t / \gamma)^\alpha}$
 
 ```{r}
+par(mfrow = c(1, 2))
 plot(recur.mod1, color = 1)
-```
-
-and survival function $S(t) = e^{-(t / \gamma)^\alpha}$
-
-```{r}
 plot(recur.mod1, type.plot = "Survival", conf.bands = TRUE, color = 1)
 ```
 
@@ -1094,6 +1090,9 @@ summary(recur.mod6)
 Infants enter daycare at the - seemingly random - behest of their guardians. As methods have not been widely developed for longitudinal data with random changepoints, the idea here is to base the timing of life on the week children enter daycare, week 0, and count backward and forward from there. The interest lies on entry into daycare and the experience while in daycare, not the exit and so the data have been truncated to the end of daycare attendance.
 
 ```{r}
+detach('package:frailtypack')
+detach('package:MASS')
+
 chng.df <- diary %>%
   filter(daycare == 1) %>%
   group_by(id) %>%
@@ -1199,9 +1198,43 @@ plot(marginal_effects(brmmod1), points = TRUE, newpage = FALSE, ask = FALSE)
 
 The second plot doesn't make much sense as daycare attendance before time = 0 cannot happen, by definition.
 
-```{r}
-set1 <- RColorBrewer::brewer.pal(9, "Set1")
+```{r, eval = TRUE, echo = FALSE}
+# Helper functions
 
+# function to plot predictions from (g)lmm models with 1 changepoint
+# @param pframe data frame of 
+# @param df optional data frame of group-wise trajectories, for spaghetti plots
+# @param x character string for variable in pframe and df where x is the independent axis in the plot
+# @param y character string for variable in pframe and df where y is the dependent axis in the plot
+# @param group optional, describes cluster in df for spaghetti plots
+predChngPlot <- function(pframe, 
+                         df = NULL, 
+                         x, y, 
+                         group = NULL) {
+  
+  set1 <- RColorBrewer::brewer.pal(9, "Set1")
+  p <- pframe %>%
+    ggplot(aes(x = .[, x], y = .[, y])) %>%
+    add(geom_line(color = set1[1])) %>%
+    add(geom_vline(xintercept = 0, lty = 2)) %>%
+    add(theme_trueMinimal(16)) %>%
+    add(labs(
+      x = "Standardized Study Times, Weeks",
+      y = "Probability of ARI"
+    ))
+  
+  if (!is.null(df)) {
+    p <- p + geom_line(data = df, 
+                       aes(x = df[, x], 
+                           y = df[, y], 
+                           group = df[, group]),
+                       alpha = 0.1)
+  }
+  p
+}
+```
+
+```{r}
 pframe <- data.frame(
   time = seq(-86, 91, by = 1),
   start = mean(chng.df$start)
@@ -1211,28 +1244,22 @@ pframe <- transform(pframe, daycare = factor(ifelse(time >= 0, 1, 0)))
 
 prediction <- data.frame(
   predict(brmmod1, 
-          newdata = pframe, 
-          re_formula = NA, 
-          type = "response")
+          newdata = pframe,
+          re_formula = NA)
   )
 
 pframe <- cbind(pframe, prediction)
 
 colnames(pframe) <- c("time", "start", "daycare", "ill", "SE", "LB", "UB")
 
-chng.df %>%
-  ggplot(aes(time, ill, group = id)) %>%
-  add(geom_line(alpha = 0.2)) %>%
-  add(geom_line(data = pframe, aes(group = NA), color = set1[1])) %>%
-  add(geom_vline(xintercept = 0, lty = 2)) %>%
-  add(theme_trueMinimal(16)) %>%
-  add(labs(
-    x = "Standardized Study Time, Weeks",
-    y = "Probability of ARI"
-  ))
+predChngPlot(pframe, chng.df, "time", "ill", "id")
 ```
 
 The red-line is the prediction from the model, with a changepoint at 0 for time of daycare entrance.
+
+```{r}
+predChngPlot(pframe = pframe, x = "time", y = "ill")
+```
 
 > Daycare + Start Age + Sex
 
@@ -1249,6 +1276,72 @@ brmmod2 <- readRDS("brm_dc_start_sex.rds")
 
 summary(brmmod2)
 exp(fixef(brmmod2))
+```
+
+```{r, echo = FALSE, eval = TRUE}
+# Helper Functions
+
+# function to extract model predictions from model of class 'brmsfit',
+# specific to this project
+# @param conditions data.frame of conditions for prediction, correspond to features/covariates of model parameter
+# @param model of class 'brmsfit'
+extractPred <- function(conditions, model) {
+  predicted <- marginal_effects(model, conditions = conditions)
+  predicted.df <- predicted$`time:daycare` %>% 
+    filter(daycare == 1 & time >= 0 | daycare == 0 & time <= 0) %>%
+    select(-ill, -id, -cond__)
+  colnames(predicted.df) <- gsub("__", "", colnames(predicted.df))
+  predicted.df
+}
+
+# function to plot group predictions from model of class 'brmsfit'
+# @param df data.frame formatted output from brms::prediction()
+# @param group character string corresponding to a factor covariate in call to brms::brm
+# @param labels factor labels for group parameter
+# @param set color set (e.g. RColorBrewer(9, "Set1"))
+# @param legend.pos vector of type 'num' describing relative coordinates of legend position
+# @param conf.band plot credible intervals/confidence bands?
+predGrpPlot <- function(df,
+                        group,
+                        labels,
+                        set,
+                        legend.pos = c(0.1, 0.85),
+                        conf.band = FALSE) {
+  
+  df[, group] <- factor(df[, group], 0:1, labels)
+  
+  p <- df %>%
+    ggplot(aes(x = time, y = estimate, color = .[, group])) %>%
+    add(geom_line()) %>%
+    add(geom_vline(xintercept = 0, lty = 2)) %>%
+    add(theme_trueMinimal(16)) %>%
+    add(theme(legend.position = legend.pos)) %>%
+    add(scale_color_manual(values = c(set[1], set[2]))) %>%
+    add(labs(
+      x = "Time, weeks",
+      y = "Probability of ARI",
+      color = ""
+    ))
+  
+  if (conf.band) {
+    p <- p + geom_ribbon(aes(ymin = lower, ymax = upper, fill = df[, group]),
+                         alpha = 0.3,
+                         show.legend = FALSE,
+                         color = NA)
+    p <- p + scale_fill_manual(values = c(set[1], set[2]))
+  }
+  p
+}
+```
+
+```{r}
+set1 <- RColorBrewer::brewer.pal(9, "Set1")
+
+conditions <- data.frame(female = c(0, 1))
+
+predicted <- extractPred(conditions, brmmod2)
+
+predGrpPlot(predicted, "female", c("Male", "Female"), set1, conf.band = TRUE)
 ```
 
 > Daycare + Start Age + siblings
@@ -1269,54 +1362,15 @@ exp(fixef(brmmod3))
 ```
 
 ```{r}
-pframe1 <- data.frame(time = seq(-86, 91, by = 1),
-                      start = mean(chng.df$start),
-                      siblings = 1)
+conditions <- data.frame(siblings = c(0, 1))
 
-pframe0 <- data.frame(time = seq(-86, 91, by = 1), 
-                      start = mean(chng.df$start),
-                      siblings = 0)
+predicted <- extractPred(conditions, brmmod3)
 
-pframe1 <- transform(pframe1, daycare = factor(ifelse(time >= 0, 1, 0)))
-pframe0 <- transform(pframe0, daycare = factor(ifelse(time >= 0, 1, 0)))
-
-prediction1 <- data.frame(
-  predict(brmmod3, 
-          newdata = pframe1, 
-          re_formula = NA, 
-          type = "response")
-  )
-
-prediction0 <- data.frame(
-  predict(brmmod3, 
-          newdata = pframe0, 
-          re_formula = NA, 
-          type = "response")
-  )
-
-pframe1 <- cbind(pframe1, prediction1)
-pframe0 <- cbind(pframe0, prediction0)
-
-names <- c("time", "start", "siblings", "daycare", "ill",  "SE",  "LB", "UB")
-colnames(pframe1) <- names
-colnames(pframe0) <- names
-
-chng.df %>%
-  ggplot(aes(time, ill, group = id)) %>%
-  add(geom_line(alpha = 0.2)) %>%
-  add(geom_line(data = pframe1, aes(group = NA, color = "HH Siblings"))) %>%
-  add(geom_line(data = pframe0, aes(group = NA, color = "No HH Siblings"))) %>%
-  add(geom_vline(xintercept = 0, lty = 2)) %>%
-  add(theme_trueMinimal(16)) %>%
-  add(theme(legend.position = "top")) %>%
-  add(labs(
-    x = "Standardized Study Time, Weeks",
-    y = "Probability of ARI"
-  )) %>%
-  add(scale_color_manual(
-    name = "",
-    values = c(set1[1], set1[2])
-  ))
+predGrpPlot(predicted, 
+            "siblings", 
+            c("No Siblings", "Siblings"), 
+            set1, 
+            conf.band = TRUE)
 ```
 
 > Daycare + Start Age + HBoV-1 carry
@@ -1335,6 +1389,19 @@ summary(brmmod4)
 exp(fixef(brmmod4))
 ```
 
+```{r}
+conditions <- data.frame(hbov.pos = c(0, 1))
+
+predicted <- extractPred(conditions, brmmod4)
+
+predGrpPlot(predicted, 
+            "hbov.pos", 
+            c("HBoV-1 (-)", "HBoV-1 (+)"), 
+            set1, 
+            conf.band = TRUE)
+```
+
+
 > Daycare + Start Age + Play Group Activity
 
 ```{r}
@@ -1352,54 +1419,16 @@ exp(fixef(brmmod5))
 ```
 
 ```{r}
-pframe1 <- data.frame(time = seq(-86, 91, by = 1),
-                      start = mean(chng.df$start),
-                      playgrp = 1)
+conditions <- data.frame(playgrp = c(0, 1))
 
-pframe0 <- data.frame(time = seq(-86, 91, by = 1), 
-                      start = mean(chng.df$start),
-                      playgrp = 0)
+predicted <- extractPred(conditions, brmmod5)
 
-pframe1 <- transform(pframe1, daycare = factor(ifelse(time >= 0, 1, 0)))
-pframe0 <- transform(pframe0, daycare = factor(ifelse(time >= 0, 1, 0)))
-
-prediction1 <- data.frame(
-  predict(brmmod5, 
-          newdata = pframe1, 
-          re_formula = NA, 
-          type = "response")
-  )
-
-prediction0 <- data.frame(
-  predict(brmmod5, 
-          newdata = pframe0, 
-          re_formula = NA, 
-          type = "response")
-  )
-
-pframe1 <- cbind(pframe1, prediction1)
-pframe0 <- cbind(pframe0, prediction0)
-
-names <- c("time", "start", "playgrp", "daycare", "ill",  "SE",  "LB", "UB")
-colnames(pframe1) <- names
-colnames(pframe0) <- names
-
-chng.df %>%
-  ggplot(aes(time, ill, group = id)) %>%
-  add(geom_line(alpha = 0.2)) %>%
-  add(geom_line(data = pframe1, aes(group = NA, color = "Playgroup"))) %>%
-  add(geom_line(data = pframe0, aes(group = NA, color = "No Playgroup"))) %>%
-  add(geom_vline(xintercept = 0, lty = 2)) %>%
-  add(theme_trueMinimal(16)) %>%
-  add(theme(legend.position = "top")) %>%
-  add(labs(
-    x = "Standardized Study Time, Weeks",
-    y = "Probability of ARI"
-  )) %>%
-  add(scale_color_manual(
-    name = "",
-    values = c(set1[1], set1[2])
-  ))
+predGrpPlot(predicted, 
+            "playgrp", 
+            c("No Play Group", "Play Group"), 
+            set1,
+            legend.pos = c(0.15, 0.85),
+            conf.band = TRUE)
 ```
 
 > Daycare + Start Age + Random Slope
@@ -1427,26 +1456,20 @@ pframe <- data.frame(
 pframe <- transform(pframe, daycare = factor(ifelse(time >= 0, 1, 0)))
 
 prediction <- data.frame(
-  predict(brmmod1, 
-          newdata = pframe, 
-          re_formula = NA, 
-          type = "response")
+  predict(brmmod6, 
+          newdata = pframe,
+          re_formula = NA)
   )
 
 pframe <- cbind(pframe, prediction)
 
 colnames(pframe) <- c("time", "start", "daycare", "ill", "SE", "LB", "UB")
 
-chng.df %>%
-  ggplot(aes(time, ill, group = id)) %>%
-  add(geom_line(alpha = 0.2)) %>%
-  add(geom_line(data = pframe, aes(group = NA), color = set1[1])) %>%
-  add(geom_vline(xintercept = 0, lty = 2)) %>%
-  add(theme_trueMinimal(16)) %>%
-  add(labs(
-    x = "Standardized Study Time, Weeks",
-    y = "Probability of ARI"
-  ))
+predChngPlot(pframe, chng.df, "time", "ill", "id")
+```
+
+```{r}
+predChngPlot(pframe, x = "time", y = "ill")
 ```
 
 > Daycare + Start Age + Sex + Random Slope
@@ -1466,6 +1489,19 @@ summary(brmmod7)
 exp(fixef(brmmod7))
 ```
 
+```{r}
+conditions <- data.frame(female = c(0, 1))
+
+predicted <- extractPred(conditions, brmmod7)
+
+predGrpPlot(predicted, 
+            "female", 
+            c("Male", "Female"), 
+            set1,
+            legend.pos = c(0.15, 0.85),
+            conf.band = TRUE)
+```
+
 > Daycare + Start Age + Siblings + Random Slope
 
 ```{r}
@@ -1482,6 +1518,19 @@ summary(brmmod8)
 exp(fixef(brmmod8))
 ```
 
+```{r}
+conditions <- data.frame(siblings = c(0, 1))
+
+predicted <- extractPred(conditions, brmmod8)
+
+predGrpPlot(predicted, 
+            "siblings", 
+            c("No Siblings", "Siblings"), 
+            set1,
+            legend.pos = c(0.15, 0.85),
+            conf.band = TRUE)
+```
+
 > Daycare + Start Age + HBoV-1 carry + Random Slopes
 
 ```{r}
@@ -1496,6 +1545,19 @@ brmmod9 <- readRDS("brm_dc_start_boca_rans.rds")
 
 summary(brmmod9)
 exp(fixef(brmmod9))
+```
+
+```{r}
+conditions <- data.frame(hbov.pos = c(0, 1))
+
+predicted <- extractPred(conditions, brmmod9)
+
+predGrpPlot(predicted, 
+            "hbov.pos", 
+            c("HBoV-1 (-)", "HBoV-1 (+)"), 
+            set1,
+            legend.pos = c(0.15, 0.85),
+            conf.band = TRUE)
 ```
 
 > Daycare + Start Age + Play Group Activity
@@ -1515,60 +1577,22 @@ exp(fixef(brmmod10))
 ```
 
 ```{r}
-pframe1 <- data.frame(time = seq(-86, 91, by = 1),
-                      start = mean(chng.df$start),
-                      playgrp = 1)
+conditions <- data.frame(playgrp = c(0, 1))
 
-pframe0 <- data.frame(time = seq(-86, 91, by = 1), 
-                      start = mean(chng.df$start),
-                      playgrp = 0)
+predicted <- extractPred(conditions, brmmod10)
 
-pframe1 <- transform(pframe1, daycare = factor(ifelse(time >= 0, 1, 0)))
-pframe0 <- transform(pframe0, daycare = factor(ifelse(time >= 0, 1, 0)))
-
-prediction1 <- data.frame(
-  predict(brmmod10, 
-          newdata = pframe1, 
-          re_formula = NA, 
-          type = "response")
-  )
-
-prediction0 <- data.frame(
-  predict(brmmod10, 
-          newdata = pframe0, 
-          re_formula = NA, 
-          type = "response")
-  )
-
-pframe1 <- cbind(pframe1, prediction1)
-pframe0 <- cbind(pframe0, prediction0)
-
-names <- c("time", "start", "playgrp", "daycare", "ill",  "SE",  "LB", "UB")
-colnames(pframe1) <- names
-colnames(pframe0) <- names
-
-chng.df %>%
-  ggplot(aes(time, ill, group = id)) %>%
-  add(geom_line(alpha = 0.2)) %>%
-  add(geom_line(data = pframe1, aes(group = NA, color = "Playgroup"))) %>%
-  add(geom_line(data = pframe0, aes(group = NA, color = "No Playgroup"))) %>%
-  add(geom_vline(xintercept = 0, lty = 2)) %>%
-  add(theme_trueMinimal(16)) %>%
-  add(theme(legend.position = "top")) %>%
-  add(labs(
-    x = "Standardized Study Time, Weeks",
-    y = "Probability of ARI"
-  )) %>%
-  add(scale_color_manual(
-    name = "",
-    values = c(set1[1], set1[2])
-  ))
+predGrpPlot(predicted, 
+            "playgrp", 
+            c("No Play Group", "Play Group"), 
+            set1,
+            legend.pos = c(0.15, 0.85),
+            conf.band = TRUE)
 ```
 
 # Misc. Functons
 
 ```{r, echo = TRUE, eval = FALSE}
-# true minimal theme
+# true minimal theme for plotting ggplot objects
 theme_trueMinimal <- function(base_size = 16, base_family = "") {
     theme_bw(base_size = base_size, base_family = base_family) %+replace% 
         theme(axis.ticks = element_blank(), 
@@ -1585,6 +1609,10 @@ theme_trueMinimal <- function(base_size = 16, base_family = "") {
               complete = TRUE)
 }
 
+# function to simulate predictions from msm::pmatrix.msm
+# @param object of class 'msm' from msm package
+# @param levels factor levels for transitions in markov model
+# @param labels factor labels for transitions in markov model
 pmat_sim <- function(model,
                      iterations,
                      levels = NULL, 
@@ -1614,6 +1642,90 @@ pmat_sim <- function(model,
       select(-From, -To)
   } # end if
   return(df)
+}
+
+# function to plot predictions from (g)lmm models with 1 changepoint
+# @param pframe data frame of 
+# @param df optional data frame of group-wise trajectories, for spaghetti plots
+# @param x character string for variable in pframe and df where x is the independent axis in the plot
+# @param y character string for variable in pframe and df where y is the dependent axis in the plot
+# @param group optional, describes cluster in df for spaghetti plots
+predChngPlot <- function(pframe, 
+                         df = NULL, 
+                         x, y, 
+                         group = NULL) {
+  
+  set1 <- RColorBrewer::brewer.pal(9, "Set1")
+  p <- pframe %>%
+    ggplot(aes(x = .[, x], y = .[, y])) %>%
+    add(geom_line(color = set1[1])) %>%
+    add(geom_vline(xintercept = 0, lty = 2)) %>%
+    add(theme_trueMinimal(16)) %>%
+    add(labs(
+      x = "Standardized Study Times, Weeks",
+      y = "Probability of ARI"
+    ))
+  
+  if (!is.null(df)) {
+    p <- p + geom_line(data = df, 
+                       aes(x = df[, x], 
+                           y = df[, y], 
+                           group = df[, group]),
+                       alpha = 0.1)
+  }
+  p
+}
+
+# function to extract model predictions from model of class 'brmsfit',
+# specific to this project
+# @param conditions data.frame of conditions for prediction, correspond to features/covariates of model parameter
+# @param model of class 'brmsfit'
+extractPred <- function(conditions, model) {
+  predicted <- marginal_effects(model, conditions = conditions)
+  predicted.df <- predicted$`time:daycare` %>% 
+    filter(daycare == 1 & time >= 0 | daycare == 0 & time <= 0) %>%
+    select(-ill, -id, -cond__)
+  colnames(predicted.df) <- gsub("__", "", colnames(predicted.df))
+  predicted.df
+}
+
+# function to plot group predictions from model of class 'brmsfit'
+# @param df data.frame formatted output from brms::prediction()
+# @param group character string corresponding to a factor covariate in call to brms::brm
+# @param labels factor labels for group parameter
+# @param set color set (e.g. RColorBrewer(9, "Set1"))
+# @param legend.pos vector of type 'num' describing relative coordinates of legend position
+# @param conf.band plot credible intervals/confidence bands?
+predGrpPlot <- function(df,
+                        group,
+                        labels,
+                        set,
+                        legend.pos = c(0.1, 0.85),
+                        conf.band = FALSE) {
+  
+  df[, group] <- factor(df[, group], 0:1, labels)
+  
+  p <- df %>%
+    ggplot(aes(x = time, y = estimate, color = .[, group])) %>%
+    add(geom_line()) %>%
+    add(geom_vline(xintercept = 0, lty = 2)) %>%
+    add(theme_trueMinimal(16)) %>%
+    add(theme(legend.position = legend.pos)) %>%
+    add(scale_color_manual(values = c(set[1], set[2]))) %>%
+    add(labs(
+      x = "Time, weeks",
+      y = "Probability of ARI",
+      color = ""
+    ))
+  
+  if (conf.band) {
+    p <- p + geom_ribbon(aes(ymin = lower, ymax = upper, fill = df[, group]),
+                         alpha = 0.3,
+                         show.legend = FALSE,
+                         color = NA)
+    p <- p + scale_fill_manual(values = c(set[1], set[2]))
+  }
+  p
 }
 ```
 
