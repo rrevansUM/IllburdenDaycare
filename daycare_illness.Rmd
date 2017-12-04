@@ -59,8 +59,8 @@ library(ggthemes)
 # Load Data
 
 ```{r}
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata")
-# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/")
 
 files <- list.files(pattern = "*.rds")
 file_names <- gsub(".rds", "", files)
@@ -214,8 +214,8 @@ sapply(diary[, c(3:7, 9, 10)], table)
 
 Visualize illness chains
 
-```{r, fig.width = 6, fig.height = 4}
-some_ids <- sample(unique(diary$id), 4, replace = FALSE)
+```{r, fig.width = 8, fig.height = 4}
+some_ids <- sample(unique(diary$id), 8, replace = FALSE)
 diary %>%
   filter(id %in% some_ids) %>%
   select(id, stdy_wk, ill) %>%
@@ -252,7 +252,7 @@ Illness episodes/recorded are randomly distributed throughout the studied life h
 Daycare attendance may modify illness frequency, the timeliness of daycare attendance of the infant lifecourse is more or less random:
 
 ```{r}
-some_ids <- sample(demo$id[demo$day_care == 1], 4)
+some_ids <- sample(demo$id[demo$day_care == 1], 8)
 
 dc_times <- diary %>%
   filter(id %in% some_ids & daycare == 1) %>%
@@ -278,7 +278,7 @@ diary %>%
                     ymax = Inf),
                 alpha = 0.3,
                 inherit.aes = FALSE)) %>%
-  add(facet_wrap(~id)) %>%
+  add(facet_wrap(~id, nrow = 2)) %>%
   add(theme_trueMinimal()) %>%
   add(scale_y_continuous(breaks = c(0, 1))) %>%
   add(labs(
@@ -314,10 +314,10 @@ lines <- diary %>%
   ungroup() %>%
   right_join(distinct(points, id), by = "id")
 
-points %>%
+p <- points %>%
   ggplot(aes(x = id, y = stdy_wk)) %>%
   add(coord_flip()) %>%
-  add(geom_point(size = 0.5)) %>%
+  add(geom_point(size = 1)) %>%
   add(geom_linerange(data = lines, 
                      aes(x = id, ymin = 0, ymax = stdy_wk),
                      size = 0.1)) %>%
@@ -332,9 +332,16 @@ points %>%
     y = "Infant Age, Weeks",
     x = "ID"
     ))
+p
 ```
 
 The above plot describes ARI recurrence by infant. Each point is an ARI episode ($\ge$ 2 of cough, runny nose, sore throat, etc.), and each thick grey line is the duration of daycare attendance as recorded in the diary.
+
+```{r, echo = FALSE, eval = FALSE}
+# ggsave("daycare_experience.tiff", p, device = "tiff",
+#        path = "S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/plots",
+#        width = 8, height = 10, units = "in", dpi = 600)
+```
 
 # Modelling
 
@@ -401,6 +408,26 @@ plotmat(M,
         arr.type = "triangle")
 ```
 
+```{r, echo = FALSE, eval = FALSE}
+# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/plots")
+# tiff("markov_diagram.tiff", height = 7, width = 7, units = "in", res = 700,
+#      compression = "lzw")
+# plotmat(M,
+#         pos = 2,
+#         shadow.size = 0,
+#         curve = curves,
+#         name = names,
+#         lwd = 1,
+#         box.lwd = 2,
+#         cex.txt = 0.8,
+#         self.cex = 0.5,
+#         self.shiftx = c(-0.1, 0.1),
+#         self.shifty = c(0.1, 0.1),
+#         self.arrpos = c(1.6, 1.5),
+#         arr.type = "triangle")
+# dev.off()
+```
+
 Initial values could be set by supposing that transitions between states take place only at the observation times, fortunately the data we are working with can be said to have exact observation times. If we observe $n_{rs}$ transitions from state $r$ to state $s$, and a total of $n_{r}$ transitions from state $r$, then $q_{rs}/q_{rr}$ can be estimated by $n_{rs}/n_{r}$. Then, given a total of $T_{r}$ years spent in state $r$, the mean sojourn time $1/q_{rr}$ can be estimated as $T_{r}/n_{r}$. Thus, $n_{rs}/T_{r}$ is a crude estimate of $q_{rs}$. The msm package provides a function crudeinits.msm for calculating initial values in this way.
 
 Initialized Q matrix, entries generated above
@@ -454,7 +481,7 @@ The interpretation of the estimated transition intensity matrix is somewhat inte
 
 The total duration in any particular state can be estimated with bootstrapped errors:
 
-```{r}
+```{r, }
 # totals <- totlos.msm(markov1,
 #                      fromt = 0,
 #                      tot = 52,
@@ -462,8 +489,8 @@ The total duration in any particular state can be estimated with bootstrapped er
 #                      B = 100,
 #                      cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
-# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
 # saveRDS(totals, "markov1_totals52.rds")
 totals <- readRDS("markov1_totals52.rds")
 
@@ -539,9 +566,9 @@ All infants exit the study (END is an absorbing state), i.e. in the above plot, 
 
 Probabilities for the first year of life (52 weeks)
 
-```{r, fig.width = 7, fig.height = 7}
-# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+```{r, fig.width = 7, fig.height = 5}
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
 # pmat <- pmat_sim(markov1, 52, levels = Qlevels, labels = Qlabels)
 # saveRDS(pmat, "markov1_pmat52.rds")
 pmat <- readRDS("markov1_pmat52.rds")
@@ -553,7 +580,7 @@ pmat <- readRDS("markov1_pmat52.rds")
 pmat$transition <- factor(pmat$transition,
                           levels(pmat$transition)[c(1, 3, 4, 2)])
 
-pmat %>%
+p <- pmat %>%
   arrange(transition, time) %>%
   ggplot(aes(x = time)) %>%
   add(geom_line(aes(y = P_rs))) %>%
@@ -562,38 +589,53 @@ pmat %>%
   add(facet_wrap(~transition, 
                  nrow = length(levels(pmat$transition)) / 2, 
                  ncol = length(levels(pmat$transition)) / 2 )) %>%
-  add(theme_base()) %>%
+  add(theme_minimal()) %>%
   add(labs(
     x = "\n Time since birth, weeks",
     y = expression(hat(P)[rs]),
     caption = "--- Gaussian 95% confidence bands"
   ))
+p
+```
+
+```{r, echo = FALSE, eval = FALSE}
+ggsave("pmat_1.tiff", p, device = "tiff",
+       path = "S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/plots",
+       width = 8, height = 6, units = "in", dpi = 700)
 ```
 
 The plot above describes the probability (independent axis) of transition into the state defined in the facets, at a particular time in the infants life (dependent axis). Specifically, it describes the probability of occupying state $s \, (ARI(-) \, or \, ARI(+))$ at time $t + u$, conditionally on occupying state $r \, (ARI(-) \, or \, ARI(+))$ at time $u$. For these data, the top right corner describes the probability of being $ARI (+)$, at time $t + u$, given that the infant was in state $ARI (-)$ at time $t$. The probability of never having an ARI episode, throughout the course of infant life up to 52 weeks, decreases exponentially with time (top left corner: ARI(-) - ARI(-)). The probability of acquiring ARI episodes 
 
+The goodness-of-fit can be measured in several ways, the first is a rough idea of observed vs. expected prevalences. The msm::prevalence.msm() procedure estimates the observed numbers of individuals occupying each state at a series of times and compares these with forecasts from the fitted model.
+
 ```{r}
-prevalence.msm(markov1)
+prev1 <- prevalence.msm(markov1, ci = "bootstrap", B = 100, cores = 4)
+prev1
 ```
 
-```{r, fig.width = 7, fig.height = 5}
-plot.prevalence.msm(markov1, legend.pos = c(0, 100))
+```{r, fig.width = 6, fig.height = 4}
+plot.prevalence.msm(markov1, 
+                    legend.pos = c(0, 100),
+                    col.obs = "black", 
+                    col.exp = "red")
 ```
 
 The model fits a general trend line to our data that does not fit very well, it does capture the overall trend, however, it expects a faster build up in occupying the ARI (+) state (state 2, t=0 to t=10).
 
 ```{r}
-plot(seq(1, 107, length.out = 11), 
-     as.numeric(prevalence.msm(markov1)$Observed[, 2]), 
-     type = "l",
+t <- seq(1, 107, length.out = 11)
+
+plot(t, as.numeric(prev1$Observed[, 2]), 
+     type = "p", pch = 19,
      xlab = "Infant Age (weeks)",
      ylab = "Prevalence (%)",
      ylim = c(0, 30))
-lines(seq(1, 107, length.out = 11), 
-      as.numeric(prevalence.msm(markov1)$Expected[, 2]),
-      type = "l", 
-      lty = 2)
-legend(0, 30, c("Observed", "Expected"), lty = c(2, 1))
+lines(t, as.numeric(prev1$Expected$estimates[, 2]),
+      type = "l",
+      lty = 1)
+lines(t, as.numeric(prev1$Expected$ci[, , 1][, 2]), lty = 2)
+lines(t, as.numeric(prev1$Expected$ci[, , 2][, 2]), lty = 2)
+legend(0, 30, c("Observed", "Expected"), pch = c(19, NA), lty = c(NA, 1))
 ```
 
 ### With Covariates
@@ -622,6 +664,43 @@ hazard.msm(markov2)
 ```
 
 Infant sex has no statistically significant bearing on rate of ARI incidence in this cohort (HR: 0.93, 95% CI: 0.78 - 1.10).
+
+```{r}
+# function to perform bootstrap estimation on sojourn difference estimates
+# @param formula, object of class 'formula' for use in msm::msm(covariates = ,)
+# @param data, data.frame for msm::msm()
+# @param B boostrap replicates
+# @param pergrp number of groups per bootstrap replicate
+# @param grp, charcter string describing subjects in data parameter
+# @param difflist object of type 'list' to pass to msm::sojourn.msm(covariates = ,)
+# @param Q object of type 'matrix', initial/crude matrix for setting up Q tranisiton matrix in msm::msm()
+# @param censor indicator in data$states denoting censored observations/states
+bootSojourn <- function(formula, 
+                        data, 
+                        B = 100, 
+                        pergrp = 10, 
+                        grp,
+                        difflist,
+                        qmatrix,
+                        censor) {
+  
+  data[, grp] <- as.factor(data[, grp])
+  
+  samp <- data[data[[grp]] %in% sample(levels(data[[grp]]), pergrp), ]
+  samp <- arrange(samp, id, weeks)
+  
+  markov <- msm(state ~ weeks,
+                subject = samp[, grp],
+                covariates = formula,
+                censor = censor,
+                data = samp,
+                qmatrix = qmatrix,
+                gen.inits = TRUE)
+  
+  
+}
+```
+
 
 > siblings
 
@@ -683,8 +762,8 @@ Estimated transition intensity matrix and transition probability matrix for the 
 Daycare attendance positively affects rate of ARI: daycare attendees are 1.76 times more lkely (76%) to experience an ARI episode.
 
 ```{r}
-# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
 
 # totals1 <- totlos.msm(markov5,
 #                       fromt = 0, tot = 52,
@@ -759,7 +838,7 @@ Infants in play groups (defined how?) are more at risk of incurring ARI episodes
 
 > Playgroup and Daycare Attendance
 
-The correlation of daycare attendance and playgroup attendance are weakly correlated, so I can put them both in the model:
+The correlation between daycare and playgroup attendance is weak, so I can put them both in the model:
 
 ```{r}
 tab <- xtabs(~day_care + play.group, data = demo)
@@ -823,8 +902,31 @@ hazard.msm(markov8)
 
 Attending daycare while also engaging in play groups during that same week has no statistically signficant affect on ARI incidence (HR: 0.7, 95% CI: 0.48 - 1.02), After adjustment, daycare attendance and playgroup engagement affect the rate of ARI with similar strengths of association and variance as their respective models, alone.
 
-```{r, fig.width = 7, fig.height = 4}
-plot.prevalence.msm(markov8, legend.pos = c(20, 100))
+```{r, fig.width = 6, fig.height = 4}
+plot.prevalence.msm(markov8, 
+                    legend.pos = c(20, 100),
+                    col.obs = "black",
+                    col.exp = "red")
+```
+
+```{r}
+prev2 <- prevalence.msm(markov8, ci = "normal", B = 100, cores = 4)
+```
+
+```{r}
+t <- seq(1, 107, length.out = 11)
+
+plot(t, as.numeric(prev2$Observed[, 2]), 
+     type = "p", pch = 19,
+     xlab = "Infant Age (weeks)",
+     ylab = "Prevalence (%)",
+     ylim = c(0, 30))
+lines(t, as.numeric(prev2$Expected$estimates[, 2]),
+      type = "l",
+      lty = 1)
+lines(t, as.numeric(prev2$Expected$ci[, , 1][, 2]), lty = 2)
+lines(t, as.numeric(prev2$Expected$ci[, , 2][, 2]), lty = 2)
+legend(0, 30, c("Observed", "Expected"), pch = c(19, NA), lty = c(NA, 1))
 ```
 
 This model provides better fit ($-2logLik = 6197$ compare to base model $-2logLik = 6294$) and estimates prevalences much better. The model still inaccurately estimates the early onset ARI episodes.
@@ -881,8 +983,8 @@ sojourn.df <- data.frame(
 #   sojourn.df[i, 4] <- sojourn[2, 4]
 # }
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
-# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
 # saveRDS(sojourn.df, "full_sojourn.rds")
 sojourn.df <- readRDS("full_sojourn.rds")
 
@@ -1133,7 +1235,7 @@ tmp <- chng.df %>% distinct(id, start)
 psych::describe(tmp$start)
 ```
 
-...ranging from 6 to 87 weeks. The median being 31 weeks.
+...ranging from 6 to 87 weeks. The mean being 31 weeks.
 
 The approach here is to model ARI incidence using a mixed-model and making a changepoint at t = 0. Mixed-models extend to piece-wise models simply through allowing a random/varying intercept and slope at the changepoint. The model used here is a bernoulli model with a logit link for ARI incidence,
 
@@ -1172,7 +1274,8 @@ theme_set(theme_trueMinimal())
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod1, "brm_dc_start.rds")
 brmmod1 <- readRDS("brm_dc_start.rds")
 
@@ -1207,9 +1310,9 @@ The second plot doesn't make much sense as daycare attendance before time = 0 ca
 # @param x character string for variable in pframe and df where x is the independent axis in the plot
 # @param y character string for variable in pframe and df where y is the dependent axis in the plot
 # @param group optional, describes cluster in df for spaghetti plots
-predChngPlot <- function(pframe, 
-                         df = NULL, 
-                         x, y, 
+predChngPlot <- function(pframe,
+                         df = NULL,
+                         x, y,
                          group = NULL) {
   
   set1 <- RColorBrewer::brewer.pal(9, "Set1")
@@ -1270,7 +1373,8 @@ predChngPlot(pframe = pframe, x = "time", y = "ill")
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod2, "brm_dc_start_sex.rds")
 brmmod2 <- readRDS("brm_dc_start_sex.rds")
 
@@ -1353,7 +1457,8 @@ predGrpPlot(predicted, "female", c("Male", "Female"), set1, conf.band = TRUE)
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod3, "brm_dc_start_sibs.rds")
 brmmod3 <- readRDS("brm_dc_start_sibs.rds")
 
@@ -1381,7 +1486,8 @@ predGrpPlot(predicted,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod4, "brm_dc_start_boca.rds")
 brmmod4 <- readRDS("brm_dc_start_boca.rds")
 
@@ -1410,7 +1516,8 @@ predGrpPlot(predicted,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod5, "brm_dc_start_pg.rds")
 brmmod5 <- readRDS("brm_dc_start_pg.rds")
 
@@ -1439,12 +1546,17 @@ predGrpPlot(predicted,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod6, "brm_dc_start_ranslope.rds")
 brmmod6 <- readRDS("brm_dc_start_ranslope.rds")
 
 summary(brmmod6)
 exp(fixef(brmmod6))
+```
+
+```{r}
+WAIC(brmmod1, brmmod6, compare = TRUE, cores = 4)
 ```
 
 ```{r}
@@ -1481,7 +1593,8 @@ predChngPlot(pframe, x = "time", y = "ill")
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod7, "brm_dc_start_sex_rans.rds")
 brmmod7 <- readRDS("brm_dc_start_sex_rans.rds")
 
@@ -1510,7 +1623,8 @@ predGrpPlot(predicted,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod8, "brm_dc_start_sibs_rans.rds")
 brmmod8 <- readRDS("brm_dc_start_sibs_rans.rds")
 
@@ -1539,7 +1653,8 @@ predGrpPlot(predicted,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod9, "brm_dc_start_boca_rans.rds")
 brmmod9 <- readRDS("brm_dc_start_boca_rans.rds")
 
@@ -1568,7 +1683,8 @@ predGrpPlot(predicted,
 #                 family = bernoulli,
 #                 cores = 4)
 
-setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
+setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+# setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod10, "brm_dc_start_pg_rans.rds")
 brmmod10 <- readRDS("brm_dc_start_pg_rans.rds")
 
