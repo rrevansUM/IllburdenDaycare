@@ -47,20 +47,26 @@ Demographic data were collected from the mother at enrollment through administer
 
 Infection episodes were defined as at least two weeks of RT-PCR positive HBoV-1 infection for entry and exit with no more than 1 interrim negative specimen within the episode. The first episode was termed primary with all others defined as secondary, tertiary, quaternary, and quinary. For purposes of analyses all secondary and subsequent infection episodes were categorized as 'secondary'.
 
-# Libraries
+# Libraries and Preferences
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 library(tidyverse)
 library(magrittr)
 library(tableone)
 library(ggthemes)
 ```
 
-# Load Data
+Color Preferences
 
 ```{r}
+set1 <- RColorBrewer::brewer.pal(9, "Set1")
+```
+
+# Load Data
+
+```{r, warning = FALSE}
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata")
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/")
+setwd("Rdata/")
 
 files <- list.files(pattern = "*.rds")
 file_names <- gsub(".rds", "", files)
@@ -145,7 +151,7 @@ pg_dates <- demo %>%
   filter(!is.na(play.start))
 ```
 
-```{r}
+```{r, warning = FALSE}
 dummy <- function(x) {
   x <- ifelse(x != 0, 1, 0)
   x
@@ -339,7 +345,7 @@ The above plot describes ARI recurrence by infant. Each point is an ARI episode 
 
 ```{r, echo = FALSE, eval = FALSE}
 # ggsave("daycare_experience.tiff", p, device = "tiff",
-#        path = "S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/plots",
+#        path = "plots/",
 #        width = 8, height = 10, units = "in", dpi = 600)
 ```
 
@@ -409,7 +415,7 @@ plotmat(M,
 ```
 
 ```{r, echo = FALSE, eval = FALSE}
-# setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/plots")
+# setwd("plots/")
 # tiff("markov_diagram.tiff", height = 7, width = 7, units = "in", res = 700,
 #      compression = "lzw")
 # plotmat(M,
@@ -426,6 +432,7 @@ plotmat(M,
 #         self.arrpos = c(1.6, 1.5),
 #         arr.type = "triangle")
 # dev.off()
+detach('package:diagram')
 ```
 
 Initial values could be set by supposing that transitions between states take place only at the observation times, fortunately the data we are working with can be said to have exact observation times. If we observe $n_{rs}$ transitions from state $r$ to state $s$, and a total of $n_{r}$ transitions from state $r$, then $q_{rs}/q_{rr}$ can be estimated by $n_{rs}/n_{r}$. Then, given a total of $T_{r}$ years spent in state $r$, the mean sojourn time $1/q_{rr}$ can be estimated as $T_{r}/n_{r}$. Thus, $n_{rs}/T_{r}$ is a crude estimate of $q_{rs}$. The msm package provides a function crudeinits.msm for calculating initial values in this way.
@@ -481,7 +488,7 @@ The interpretation of the estimated transition intensity matrix is somewhat inte
 
 The total duration in any particular state can be estimated with bootstrapped errors:
 
-```{r, }
+```{r, warning = FALSE, message = FALSE}
 # totals <- totlos.msm(markov1,
 #                      fromt = 0,
 #                      tot = 52,
@@ -490,7 +497,7 @@ The total duration in any particular state can be estimated with bootstrapped er
 #                      cores = 4)
 
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # saveRDS(totals, "markov1_totals52.rds")
 totals <- readRDS("markov1_totals52.rds")
 
@@ -502,14 +509,33 @@ Within the first year of life, the estimated total number of weeks spent in ARI 
 Each entry in the estimated transition probability matrix can be interpreted as the probability of occupying state s at time = origin + t, conditionally on occupying state r at time = origin. For t = 1 (1 weeks time), the probability of an ARI is 10.1% (95% CI: 9.5% - 10.8%). At 3 weeks after birth the probability of an ARI is 16.2% (95% CI: 15.0% - 17.3%). We can plot the estimated probability trajectory for 10 simulated weeks:
 
 ```{r, eval = TRUE, echo = FALSE}
+# function to simulate predictions from msm::pmatrix.msm
+#' @param object of class 'msm' from msm package
+#' @param time integer, time interval to estimate transition probabilities
+#' @param levels factor levels for transitions in markov model
+#' @param labels factor labels for transitions in markov model
+#' @param covariates list of covariate values at which to estimate the transition probabilities
+
 pmat_sim <- function(model,
-                     iterations,
+                     time,
                      levels = NULL, 
-                     labels = NULL) {
+                     labels = NULL,
+                     covariates = NULL) {
   require(dplyr)
   df_list <- list()
-  for (i in 1:iterations) {
-    pmat <- pmatrix.msm(markov1, ci = "normal", t = i, cl = 0.95)
+  for (i in 1:time) {
+    if (is.null(covariates)) {
+      pmat <- pmatrix.msm(model, 
+                          ci = "normal", 
+                          t = i, 
+                          cl = 0.95)
+    } else {
+      pmat <- pmatrix.msm(model, 
+                          ci = "normal", 
+                          t = i, 
+                          cl = 0.95,
+                          covariates = covariates)
+    }
     estimates <- as.data.frame(as.table(pmat$estimates))
     colnames(estimates) <- c("From", "To", "P_rs")
     UB <- as.data.frame(as.table(pmat$U))
@@ -530,7 +556,7 @@ pmat_sim <- function(model,
       ) %>%
       select(-From, -To)
   } # end if
-  return(df)
+  df
 }
 ```
 
@@ -544,7 +570,11 @@ Qlabels <- c("ARI (-)", "ARI (+)")
 Qlabels <- expand.grid(Qlabels, Qlabels)
 Qlabels <- mutate(Qlabels, transition = paste(Var1, "-", Var2))[, 3]
 
-pmat <- pmat_sim(markov1, 10, levels = Qlevels, labels = Qlabels)
+pmat <- pmat_sim(markov1, 
+                 time = 10, 
+                 levels = Qlevels, 
+                 labels = Qlabels,
+                 covariates = NULL)
 
 # this includes everything, as a check that the model is specified correctly
 pmat %>%
@@ -566,8 +596,8 @@ All infants exit the study (END is an absorbing state), i.e. in the above plot, 
 
 Probabilities for the first year of life (52 weeks)
 
-```{r, fig.width = 7, fig.height = 5}
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+```{r, fig.width = 7, fig.height = 5, warning = FALSE}
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
 # pmat <- pmat_sim(markov1, 52, levels = Qlevels, labels = Qlabels)
 # saveRDS(pmat, "markov1_pmat52.rds")
@@ -599,9 +629,9 @@ p
 ```
 
 ```{r, echo = FALSE, eval = FALSE}
-ggsave("pmat_1.tiff", p, device = "tiff",
-       path = "S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/plots",
-       width = 8, height = 6, units = "in", dpi = 700)
+# ggsave("pmat_1.tiff", p, device = "tiff",
+#        path = "S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/plots",
+#        width = 8, height = 6, units = "in", dpi = 700)
 ```
 
 The plot above describes the probability (independent axis) of transition into the state defined in the facets, at a particular time in the infants life (dependent axis). Specifically, it describes the probability of occupying state $s \, (ARI(-) \, or \, ARI(+))$ at time $t + u$, conditionally on occupying state $r \, (ARI(-) \, or \, ARI(+))$ at time $u$. For these data, the top right corner describes the probability of being $ARI (+)$, at time $t + u$, given that the infant was in state $ARI (-)$ at time $t$. The probability of never having an ARI episode, throughout the course of infant life up to 52 weeks, decreases exponentially with time (top left corner: ARI(-) - ARI(-)). The probability of acquiring ARI episodes 
@@ -613,7 +643,7 @@ prev1 <- prevalence.msm(markov1, ci = "bootstrap", B = 100, cores = 4)
 prev1
 ```
 
-```{r, fig.width = 6, fig.height = 4}
+```{r, fig.width = 8, fig.height = 4}
 plot.prevalence.msm(markov1, 
                     legend.pos = c(0, 100),
                     col.obs = "black", 
@@ -648,7 +678,9 @@ states_cov <- demo %>%
   mutate(id = as.integer(id)) %>%
   right_join(states, by = "id") %>%
   arrange(id, weeks)
+```
 
+```{r}
 markov2 <- msm(state ~ weeks,
                subject = id,
                covariates = ~female,
@@ -665,42 +697,94 @@ hazard.msm(markov2)
 
 Infant sex has no statistically significant bearing on rate of ARI incidence in this cohort (HR: 0.93, 95% CI: 0.78 - 1.10).
 
-```{r}
+```{r, eval = TRUE, echo = FALSE}
 # function to perform bootstrap estimation on sojourn difference estimates
-# @param formula, object of class 'formula' for use in msm::msm(covariates = ,)
-# @param data, data.frame for msm::msm()
-# @param B boostrap replicates
-# @param pergrp number of groups per bootstrap replicate
-# @param grp, charcter string describing subjects in data parameter
-# @param difflist object of type 'list' to pass to msm::sojourn.msm(covariates = ,)
-# @param Q object of type 'matrix', initial/crude matrix for setting up Q tranisiton matrix in msm::msm()
-# @param censor indicator in data$states denoting censored observations/states
-bootSojourn <- function(formula, 
-                        data, 
-                        B = 100, 
-                        pergrp = 10, 
-                        grp,
+# requires libraries msm, dplyr
+# cluster should be called 'id', for now...msm issue
+#' @param formula, object of class 'formula' for use in msm::msm(covariates = ,)
+#' @param data, data.frame for msm::msm()
+#' @param B boostrap replicates
+#' @param pergrp number of groups per bootstrap replicate
+#' @param grp, charcter string describing subjects in data parameter
+#' @param difflist object of type 'list' to pass to msm::sojourn.msm(covariates = ,)
+#' @param Q object of type 'matrix', initial/crude matrix for setting up Q tranisiton matrix in msm::msm()
+#' @param censor indicator in data$states denoting censored observations/states
+
+bootSojourn <- function(formula,
+                        data,
+                        B = 100,
+                        cluster,
                         difflist,
                         qmatrix,
                         censor) {
   
-  data[, grp] <- as.factor(data[, grp])
+  sojourn_diff <- matrix(NA, nrow = B, ncol = 1)
   
-  samp <- data[data[[grp]] %in% sample(levels(data[[grp]]), pergrp), ]
-  samp <- arrange(samp, id, weeks)
+  pb <- txtProgressBar(min = 1, max = B, style = 3)
+  for (i in 1:B) {
+    
+    data[, cluster] <- as.factor(data[, cluster])
+    
+    clust_samp <- sample(levels(data[[cluster]]), replace = TRUE)
+    
+    samp <- data[data[[cluster]] %in% clust_samp, ]
+    
+    markov <- msm(state ~ weeks,
+                  subject = id,
+                  covariates = formula,
+                  censor = censor,
+                  data = samp,
+                  qmatrix = qmatrix,
+                  gen.inits = TRUE)
+    
+    sojourn0 <- sojourn.msm(markov, covariates = difflist[[1]])
+    sojourn1 <- sojourn.msm(markov, covariates = difflist[[2]])
+    
+    sojourn_diff[i, 1] <- sojourn1[2, 1] - sojourn0[2, 1]
+    
+    setTxtProgressBar(pb, i)
+  }
   
-  markov <- msm(state ~ weeks,
-                subject = samp[, grp],
-                covariates = formula,
-                censor = censor,
-                data = samp,
-                qmatrix = qmatrix,
-                gen.inits = TRUE)
+  result <- data.frame(result = rep(NA, 2))
+  row.names(result) <- c("Mean (SD):", "Median (95% CI):")
   
+  result[1, ] <- paste0(round(mean(sojourn_diff), 2), 
+                        " (",
+                        round(sd(sojourn_diff), 2),
+                        ")")
   
+  result[2, ] <- paste0(round(quantile(sojourn_diff, 0.5), 2),
+                        " (",
+                        round(quantile(sojourn_diff, 0.025), 2),
+                        ", ",
+                        round(quantile(sojourn_diff, 0.975), 2),
+                        ")")
+  
+  list(sojourn_diff = sojourn_diff, results = result)
 }
 ```
 
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(female = 0), list(female = 1))
+
+female_boot <- bootSojourn(formula = as.formula(~female), 
+                           data = states_cov, 
+                           B = 1000, 
+                           cluster = "id", 
+                           difflist = difflist,
+                           qmatrix = crudeQ,
+                           censor = 0)
+```
+
+```{r, warning = FALSE}
+setwd("Rdata/output")
+# saveRDS(female_boot, "fem_boot_sojourn.rds")
+female_boot <- readRDS("fem_boot_sojourn.rds")
+```
+
+```{r}
+female_boot$results
+```
 
 > siblings
 
@@ -721,6 +805,28 @@ hazard.msm(markov3)
 
 Having siblings has no bearing on ARI incidence (HR: 1.08, 95% CI: 0.91 - 1.28)
 
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(siblings = 0), list(siblings = 1))
+
+sibs_boot <- bootSojourn(formula = as.formula(~siblings), 
+                         data = states_cov, 
+                         B = 1000,
+                         cluster = "id", 
+                         difflist = difflist,
+                         qmatrix = crudeQ,
+                         censor = 0)
+```
+
+```{r, warning = FALSE}
+setwd("Rdata/output")
+# saveRDS(sibs_boot, "sibs_boot_sojourn.rds")
+sibs_boot <- readRDS("sibs_boot_sojourn.rds")
+```
+
+```{r}
+sibs_boot$results
+```
+
 > Siblings and Sex
 
 ```{r}
@@ -739,6 +845,30 @@ hazard.msm(markov4)
 ```
 
 One could argue that, given differences in behavior between males and females, contact with siblings could affect the rate of respiratory illnesses. Infants of this age may be too young to show these behavioral differences, explaining the lack of an effect here and in the model above (markov3).
+
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(siblings = 0, female = 0),
+                 list(siblings = 1, female = 1))
+form <- as.formula(~female + siblings + female * siblings)
+
+femXsibs_boot <- bootSojourn(formula = form, 
+                             data = states_cov,
+                             B = 1000,
+                             cluster = "id", 
+                             difflist = difflist,
+                             qmatrix = crudeQ,
+                             censor = 0)
+```
+
+```{r, warning = FALSE}
+setwd("Rdata/output")
+# saveRDS(femXsibs_boot, "femaleXsibs_boot_sojourn.rds")
+femXsibs_boot <- readRDS("femaleXsibs_boot_sojourn.rds")
+```
+
+```{r}
+femXsibs_boot$results
+```
 
 > Daycare Attendance
 
@@ -761,8 +891,8 @@ Estimated transition intensity matrix and transition probability matrix for the 
 
 Daycare attendance positively affects rate of ARI: daycare attendees are 1.76 times more lkely (76%) to experience an ARI episode.
 
-```{r}
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+```{r, warning = FALSE}
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
 
 # totals1 <- totlos.msm(markov5,
@@ -798,12 +928,157 @@ totals0
 
 where the estimated total duration of ARI episodes is 7.2 weeks (95% CI: 6.39 - 7.94).
 
-> Daycare and HBoV-1 shedding
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(daycare = 0), list(daycare = 1))
+form <- as.formula(~daycare)
+
+daycare_boot <- bootSojourn(formula = form, 
+                            data = states_cov,
+                            B = 1000,
+                            cluster = "id", 
+                            difflist = difflist,
+                            qmatrix = crudeQ,
+                            censor = 0)
+```
+
+```{r, warning = FALSE}
+setwd("Rdata/output")
+# saveRDS(daycare_boot, "daycare_boot_sojourn.rds")
+daycare_boot <- readRDS("daycare_boot_sojourn.rds")
+```
+
+```{r}
+daycare_boot$results
+```
+
+```{r, echo = TRUE, eval = FALSE}
+pmat_dc0 <- pmat_sim(markov5, 
+                     time = 52, 
+                     levels = Qlevels, 
+                     labels = Qlabels,
+                     covariates = list(daycare = 0))
+
+pmat_dc1 <- pmat_sim(markov5,
+                     time = 52, 
+                     levels = Qlevels, 
+                     labels = Qlabels,
+                     covariates = list(daycare = 1))
+```
+
+```{r, echo = FALSE, eval = FALSE}
+setwd("Rdata/output/")
+saveRDS(pmat_dc0, "pmat_dc0.rds")
+saveRDS(pmat_dc1, "pmat_dc1.rds")
+```
+
+```{r, echo = FALSE, eval = TRUE, warning = FALSE, message = FALSE}
+setwd("Rdata/output/")
+pmat_dc0 <- readRDS("pmat_dc0.rds")
+pmat_dc1 <- readRDS("pmat_dc1.rds")
+```
+
+combine data frames and plot
+
+```{r}
+pmat_dc1$daycare <- 1
+pmat_dc0$daycare <- 0
+
+pmat_dc <- rbind(pmat_dc1, pmat_dc0)
+pmat_dc$daycare <- factor(pmat_dc$daycare,
+                          0:1, 
+                          c("No Daycare Attendance", "Daycare Attendance"))
+pmat_dc <- filter(pmat_dc, transition %in% Qlabels[c(3, 2)])
+pmat_dc$transition <- factor(pmat_dc$transition,
+                             levels = levels(pmat_dc$transition)[3:2])
+
+pmat_dc.plot <- pmat_dc %>%
+  ggplot(aes(x = time, y = P_rs, fill = daycare, ymin = LB, ymax = UB)) %>%
+  add(geom_line(aes(color = daycare))) %>%
+  add(geom_ribbon(alpha = 0.2)) %>%
+  add(theme_minimal(16)) %>%
+  add(theme(
+    legend.position = c(0.2, 0.9)
+    )) %>%
+  add(scale_color_manual(name = "", values = set1[1:2])) %>%
+  add(scale_fill_manual(name = "", values = set1[1:2])) %>%
+  add(guides(color = guide_legend(override.aes = list(fill = NA)))) %>%
+  add(facet_wrap(~transition)) %>%
+  add(labs(
+    x = "Infant Age (weeks)",
+    y = expression(hat(P)[rs])
+  ))
+pmat_dc.plot
+```
+
+We can extract estimated quantities and calculated entities (matrices) to be further used in the markovchain package, this way we can get steady states, plots, etc.
+
+```{r, warning = FALSE, message = FALSE}
+library(markovchain)
+
+ari <- c("ARI(-)", "ARI(+)")
+
+pmat0 <- pmatrix.msm(markov5, covariates = list(daycare = 0))
+pmat0 <- matrix(c(pmat0[1, 1], pmat0[1, 2],
+                  pmat0[2, 1], pmat0[2, 2]), 
+                byrow = TRUE, nrow = 2,
+                dimnames = list(ari, ari))
+pmat0 <- new("markovchain", 
+             states = ari, 
+             byrow = TRUE, 
+             transitionMatrix = pmat0,
+             name = "pmat0")
+
+pmat1 <- pmatrix.msm(markov5, covariates = list(daycare = 1))
+pmat1 <- matrix(c(pmat1[1, 1], pmat1[1, 2],
+                  pmat1[2, 1], pmat1[2, 2]), 
+                byrow = TRUE, nrow = 2,
+                dimnames = list(ari, ari))
+pmat1 <- new("markovchain", 
+             states = ari, 
+             byrow = TRUE, 
+             transitionMatrix = pmat1,
+             name = "pmat1")
+```
+
+The steady state of a system is the probability that,
+
+$$
+\begin{align}
+0 \le \pi_j \le 1 \\
+\sum_{j\in S}\pi_j = 1 \\
+\pi * P = \pi
+\end{align}
+$$
+steady states are associated to P eigenvalues = 1. Therefore the steady states can be identified by the following:
+
+1. decompose the transition matrix into eigenvalues and eigenvectors
+2. consider only eigenvectors corresponding to eigenvalues = 1
+3. normalize such eigenvalues so that the sum of their components = 1
+
+For those not in daycare at time $t$
+
+```{r}
+steadyStates(pmat0)
+```
+
+For those in daycare at time $t$
+
+```{r}
+steadyStates(pmat1)
+```
+
+The way to think of this is, these are the probabilities tha the system will be found in each of the states at a given future time, so it's dependent on a future time. However, as time approaches infinity, the states approaches a limiting value (most of the time). These stable probabilities are what we are estimating. If the system starts so that each state has a probability equal to its stable probability, then these probabilityes will persist for all time, i.e., the system is in a "steady state".
+
+```{r, echo = FALSE, eval = TRUE}
+detach('package:markovchain')
+```
+
+> HBoV-1 Shedding
 
 ```{r}
 markov6 <- msm(state ~ weeks,
                subject = id,
-               covariates = ~daycare + hbov.pos + daycare * hbov.pos,
+               covariates = ~hbov.pos,
                censor = 0,
                data = states_cov,
                qmatrix = crudeQ,
@@ -815,14 +1090,35 @@ markov6
 hazard.msm(markov6)
 ```
 
-The carriage time of an ARI associated organism, Human Bocavirus 1, may confound the effect of daycare attendance on ARI incidence. Here, there is no significant interaction between daycare attendance and HBoV-1 shedding on the incidence of ARI (HR: 0.81, 95% CI: 0.52 - 1.26).
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(hbov.pos = 0), list(hbov.pos = 1))
+form <- as.formula(~hbov.pos)
 
-> Playgroup Association
+boca_boot <- bootSojourn(formula = form, 
+                         data = states_cov,
+                         B = 1000,
+                         cluster = "id", 
+                         difflist = difflist,
+                         qmatrix = crudeQ,
+                         censor = 0)
+```
+
+```{r, warning = FALSE}
+setwd("Rdata/output")
+# saveRDS(boca_boot, "boca_boot_sojourn.rds")
+boca_boot <- readRDS("boca_boot_sojourn.rds")
+```
+
+```{r}
+boca_boot$results
+```
+
+> Daycare and HBoV-1 shedding
 
 ```{r}
 markov7 <- msm(state ~ weeks,
                subject = id,
-               covariates = ~playgrp,
+               covariates = ~daycare + hbov.pos + daycare * hbov.pos,
                censor = 0,
                data = states_cov,
                qmatrix = crudeQ,
@@ -834,7 +1130,73 @@ markov7
 hazard.msm(markov7)
 ```
 
+The carriage time of an ARI associated organism, Human Bocavirus 1, may confound the effect of daycare attendance on ARI incidence. Here, there is no significant interaction between daycare attendance and HBoV-1 shedding on the incidence of ARI (HR: 0.81, 95% CI: 0.52 - 1.26).
+
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(daycare = 0, hbov.pos = 0), 
+                 list(daycare = 1, hbov.pos = 1))
+form <- as.formula(~daycare + hbov.pos + daycare * hbov.pos)
+
+dc_boca_boot <- bootSojourn(formula = form, 
+                            data = states_cov,
+                            B = 1000,
+                            cluster = "id", 
+                            difflist = difflist,
+                            qmatrix = crudeQ,
+                            censor = 0)
+```
+
+```{r, warning = FALSE}
+setwd("Rdata/output")
+# saveRDS(dc_boca_boot, "dc_boca_boot_sojourn.rds")
+dc_boca_boot <- readRDS("dc_boca_boot_sojourn.rds")
+```
+
+```{r}
+dc_boca_boot$results
+```
+
+> Playgroup Association
+
+```{r}
+markov8 <- msm(state ~ weeks,
+               subject = id,
+               covariates = ~playgrp,
+               censor = 0,
+               data = states_cov,
+               qmatrix = crudeQ,
+               gen.inits = TRUE)
+markov8
+```
+
+```{r}
+hazard.msm(markov8)
+```
+
 Infants in play groups (defined how?) are more at risk of incurring ARI episodes than infants not attending a play group by 24% (HR: 1.24, 95% CI: 1.05 - 1.47).
+
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(playgrp = 0), list(playgrp = 1))
+form <- as.formula(~playgrp)
+
+playgrp_boot <- bootSojourn(formula = form, 
+                            data = states_cov,
+                            B = 1000,
+                            cluster = "id", 
+                            difflist = difflist,
+                            qmatrix = crudeQ,
+                            censor = 0)
+```
+
+```{r, warning = FALSE}
+setwd("Rdata/output")
+# saveRDS(playgrp_boot, "playgrp_boot_sojourn.rds")
+playgrp_boot <- readRDS("playgrp_boot_sojourn.rds")
+```
+
+```{r}
+playgrp_boot$results
+```
 
 > Playgroup and Daycare Attendance
 
@@ -886,31 +1248,39 @@ plyr::ddply(tmp, "id", fcor) %>%
 Only 15 individuals attended a daycare and engaged in playgroup activities at the same time and the correlations were only strong for 5 infants.
 
 ```{r}
-markov8 <- msm(state ~ weeks,
+markov9 <- msm(state ~ weeks,
                subject = id,
                covariates = ~playgrp + daycare + playgrp * daycare,
                censor = 0,
                data = states_cov,
                qmatrix = crudeQ,
                gen.inits = TRUE)
-markov8
+markov9
 ```
 
 ```{r}
-hazard.msm(markov8)
+hazard.msm(markov9)
 ```
 
 Attending daycare while also engaging in play groups during that same week has no statistically signficant affect on ARI incidence (HR: 0.7, 95% CI: 0.48 - 1.02), After adjustment, daycare attendance and playgroup engagement affect the rate of ARI with similar strengths of association and variance as their respective models, alone.
 
-```{r, fig.width = 6, fig.height = 4}
-plot.prevalence.msm(markov8, 
+```{r, fig.width = 8, fig.height = 4}
+plot.prevalence.msm(markov9, 
                     legend.pos = c(20, 100),
                     col.obs = "black",
                     col.exp = "red")
 ```
 
-```{r}
-prev2 <- prevalence.msm(markov8, ci = "normal", B = 100, cores = 4)
+```{r, echo = TRUE, eval = FALSE}
+prev2 <- prevalence.msm(markov9, ci = "normal", B = 100, cores = 4)
+```
+
+```{r, echo = FALSE, eval = FALSE}
+saveRDS(prev2, "Rdata/markov_prevalence_dcpg.rds")
+```
+
+```{r, echo = FALSE, eval = TRUE}
+prev2 <- readRDS("Rdata/markov_prevalence_dcpg.rds")
 ```
 
 ```{r}
@@ -936,28 +1306,52 @@ Comparing sojourn times between levels of daycare and playgroup attendance:
 Without daycare or playgroup attendance:
 
 ```{r}
-sojourn.msm(markov8, covariates = list(daycare = 0, playgrp = 0))
+sojourn.msm(markov9, covariates = list(daycare = 0, playgrp = 0))
 ```
 
 In daycare, but not participating in play groups
 
 ```{r}
-sojourn.msm(markov8, covariates = list(daycare = 1, playgrp = 0))
+sojourn.msm(markov9, covariates = list(daycare = 1, playgrp = 0))
 ```
 
 Participating in a play group but not attending daycare
 
 ```{r}
-sojourn.msm(markov8, covariates = list(daycare = 0, playgrp = 1))
+sojourn.msm(markov9, covariates = list(daycare = 0, playgrp = 1))
 ```
 
 Attending a daycare and participating in a play group
 
 ```{r}
-sojourn.msm(markov8, covariates = list(daycare = 1, playgrp = 1))
+sojourn.msm(markov9, covariates = list(daycare = 1, playgrp = 1))
+```
+
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(daycare = 0, playgrp = 0), 
+                 list(daycare = 1, playgrp = 1))
+form <- as.formula(~playgrp + daycare + playgrp * daycare)
+
+dcpg_boot <- bootSojourn(formula = form, 
+                         data = states_cov,
+                         B = 1000,
+                         cluster = "id", 
+                         difflist = difflist,
+                         qmatrix = crudeQ,
+                         censor = 0)
+```
+
+```{r, warning = FALSE}
+setwd("Rdata/output")
+# saveRDS(dcpg_boot, "dcpg_boot_sojourn.rds")
+dcpg_boot <- readRDS("dcpg_boot_sojourn.rds")
 ```
 
 ```{r}
+dcpg_boot$results
+```
+
+```{r, warning = FALSE}
 cov.list <- list(list(daycare = 0, playgrp = 0),
                  list(daycare = 1, playgrp = 0),
                  list(daycare = 0, playgrp = 1),
@@ -974,7 +1368,7 @@ sojourn.df <- data.frame(
   )
 
 # for (i in 1:length(cov.list)) {
-#   sojourn <- sojourn.msm(markov8, 
+#   sojourn <- sojourn.msm(markov9, 
 #                          covariates = cov.list[[i]], 
 #                          ci = "bootstrap",
 #                          B = 100)
@@ -984,31 +1378,385 @@ sojourn.df <- data.frame(
 # }
 
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output/")
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # saveRDS(sojourn.df, "full_sojourn.rds")
 sojourn.df <- readRDS("full_sojourn.rds")
 
 sojourn.df
-
-detach('package:msm')
 ```
 
-```{r, fig.width = 10, fig.height = 6}
+```{r, fig.width = 6, fig.height = 6}
 levs <- c("No daycare, No playgroup",
           "Daycare, No playgroup",
           "No daycare, Playgroup",
           "Daycare, Playgroup")
 
-sojourn.df %>%
-  mutate(set = factor(set, levels = levs)) %>%
+labs <- gsub(", ", "\n", levs)
+
+soj.plot <- sojourn.df %>%
+  mutate(set = factor(set, levels = levs, labels = labs)) %>%
   ggplot(aes(set)) %>%
   add(geom_point(aes(y = estimates), size = 3)) %>%
   add(geom_errorbar(aes(ymin = L, ymax = U), width = 0.2)) %>%
   add(theme_trueMinimal(16)) %>%
   add(labs(
-    x = "\n Daycare Attendance and Playgroup Activity",
-    y = "Estimated Sojourn Time (weeks) in ARI episodes \n"
-  ))
+    x = "Daycare attendance and playgroup activity",
+    y = "Estimated sojourn (weeks) in ARI episodes"
+  )) %>%
+  add(scale_y_continuous(limits = c(1, 2.7)))
+soj.plot
+```
+
+> Daycare + Sex + Daycare * Sex
+
+```{r}
+markov10 <- msm(state ~ weeks,
+                subject = id,
+                covariates = ~female + daycare + female * daycare,
+                censor = 0,
+                data = states_cov,
+                qmatrix = crudeQ,
+                gen.inits = TRUE)
+markov10
+```
+
+```{r}
+hazard.msm(markov10)
+```
+
+> Daycare + Siblings + Daycare * Siblings
+
+```{r}
+markov11 <- msm(state ~ weeks,
+                subject = id,
+                covariates = ~siblings + daycare + siblings * daycare,
+                censor = 0,
+                data = states_cov,
+                qmatrix = crudeQ,
+                gen.inits = TRUE)
+markov11
+```
+
+```{r}
+hazard.msm(markov11)
+```
+
+Forest plot of hazards and CIs by daycare attendance and covariates of interest
+
+```{r}
+# collect hazards
+hazards <- lapply(mget(ls(pattern = "markov[2-9]|markov1[0-1]")), hazard.msm)
+
+# find hazards with three covariates (X1 * X2)
+hazards <- hazards[lengths(hazards) == 3]
+
+# collect hazards for third covariate
+Xhazards <- vector("list", length(hazards))
+for (i in 1:length(Xhazards)) {
+  Xhazards[[i]] <- data.frame(hazards[[i]][[3]])
+  Xhazards[[i]]$cov <- names(hazards[[i]][3])
+}
+Xhazards <- do.call(rbind, Xhazards)
+
+# add markov5 - ~ daycare
+tmp <- data.frame(hazard.msm(markov5)[[1]])
+tmp$cov <- "Daycare"
+Xhazards <- rbind(Xhazards, tmp)
+
+Xhazards$transition <- ""
+Xhazards$transition[grep("^State 1", row.names(Xhazards))] <- "ARI (-) - ARI (+)"
+Xhazards$transition[grep("^State 2", row.names(Xhazards))] <- "ARI (+) - ARI (-)"
+row.names(Xhazards) <- NULL
+
+Xhazards$cov <- factor(Xhazards$cov,
+                   levels = c("Daycare",
+                              "female1:daycare1",
+                              "siblings1:daycare1",
+                              "daycare1:hbov.pos1",
+                              "playgrp1:daycare1",
+                              "female1:siblings1"),
+                   labels = c("Daycare",
+                              "Daycare\nFemale",
+                              "Daycare\nSiblings",
+                              "Daycare\nHBoV-1",
+                              "Daycare\nPlaygroup",
+                              "Female\nSiblings"))
+```
+
+```{r}
+Xhaz.plot <- Xhazards %>%
+  filter(cov != "Female\nSiblings") %>%
+  ggplot(aes(x = cov, y = HR, ymin = L, ymax = U, color = transition)) %>%
+  add(geom_pointrange(position = position_dodge(width = 0.2))) %>%
+  add(geom_hline(yintercept = 1, lty = 2)) %>%
+  add(geom_rect(data = filter(Xhazards, cov == "Daycare"),
+                aes(xmin = -Inf, xmax = 1.5, ymin = -Inf, ymax = Inf),
+                alpha = 0.2,
+                fill = "grey",
+                inherit.aes = FALSE)) %>%
+  add(theme_trueMinimal(16)) %>%
+  add(theme(
+    legend.position = c(0.85, 0.95),
+    legend.justification = "top"
+  )) %>%
+  add(labs(
+    x = "Interaction Term",
+    y = "Hazard Ratio",
+    color = "Transition"
+  )) %>%
+  add(scale_color_manual(values = set1[1:2]))
+Xhaz.plot
+```
+
+Putting some select figures together
+
+```{r, width = 18, height = 8}
+library(gridExtra)
+grid.arrange(arrangeGrob(pmat_dc.plot, Xhaz.plot, nrow = 2), 
+                  soj.plot, 
+                  nrow = 1, 
+                  widths = c(3, 2))
+```
+
+```{r, eval = FALSE, echo = FALSE}
+# library(cowplot)
+# setwd("..")
+# 
+# left <- plot_grid(pmat_dc.plot, Xhaz.plot, labels = c('A', 'B'), nrow = 2)
+# g <- plot_grid(left, soj.plot, labels = c('', 'C'), rel_widths = c(1.8, 1))
+# ggsave("plots/markov_plot.tiff", g,
+#        height = 8, width = 18, units = "in",
+#        dpi = 1200,
+#        compression = "lzw")
+```
+
+### Daycare Subset
+
+34 infants were enrolled in daycare during the course of this study. The markov models made so far (markov5) included all 86 individuals. A subset analysis of the 34 individuals may reveal a different estimate to the effect of daycare.
+
+```{r}
+states_red <- demo %>%
+  filter(day_care == 1) %>%
+  select(id) %>%
+  mutate(id = as.integer(id)) %>%
+  left_join(states_cov, by = "id")
+
+length(unique(states_red$id))
+```
+
+> Female Sex
+
+```{r}
+markov12 <- msm(state ~ weeks,
+                subject = id,
+                covariates = ~female,
+                censor = 0,
+                data = states_red,
+                qmatrix = crudeQ,
+                gen.inits = TRUE)
+markov12
+```
+
+```{r}
+hazard.msm(markov12)
+```
+
+```{r}
+qmatrix.msm(markov12, covariates = list(female = 1))
+```
+
+```{r}
+sojourn.msm(markov12, covariates = list(female = 1))
+```
+
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(female = 0), list(female = 1))
+form <- as.formula(~female)
+
+female_boot <- bootSojourn(formula = form,
+                           data = states_red,
+                           B = 1000,
+                           cluster = "id", 
+                           difflist = difflist,
+                           qmatrix = crudeQ,
+                           censor = 0)
+```
+
+```{r}
+female_boot$results
+```
+
+> Siblings
+
+```{r}
+markov13 <- msm(state ~ weeks,
+                subject = id,
+                covariates = ~siblings,
+                censor = 0,
+                data = states_red,
+                qmatrix = crudeQ,
+                gen.inits = TRUE)
+markov13
+```
+
+```{r}
+hazard.msm(markov13)
+```
+
+```{r}
+qmatrix.msm(markov13, covariates = list(siblings = 1))
+```
+
+```{r}
+sojourn.msm(markov13, covariates = list(siblings = 1))
+```
+
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(siblings = 0), list(siblings = 1))
+form <- as.formula(~siblings)
+
+sibs_boot <- bootSojourn(formula = form,
+                         data = states_red,
+                         B = 1000,
+                         cluster = "id", 
+                         difflist = difflist,
+                         qmatrix = crudeQ,
+                         censor = 0)
+```
+
+```{r}
+sibs_boot$results
+```
+
+> Daycare Attendance
+
+```{r}
+markov13 <- msm(state ~ weeks,
+                subject = id,
+                covariates = ~daycare,
+                censor = 0,
+                data = states_red,
+                qmatrix = crudeQ,
+                gen.inits = TRUE)
+markov13
+```
+
+```{r}
+hazard.msm(markov13)
+```
+
+```{r}
+qmatrix.msm(markov13)
+```
+
+```{r}
+sojourn.msm(markov13)
+```
+
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(daycare = 0), list(daycare = 1))
+form <- as.formula(~daycare)
+
+dcpg_boot <- bootSojourn(formula = form,
+                         data = states_red,
+                         B = 1000,
+                         cluster = "id", 
+                         difflist = difflist,
+                         qmatrix = crudeQ,
+                         censor = 0)
+```
+
+```{r}
+dcpg_boot$results
+```
+
+> HBoV-1 Shedding
+
+```{r}
+markov14 <- msm(state ~ weeks,
+                subject = id,
+                covariates = ~hbov.pos,
+                censor = 0,
+                data = states_red,
+                qmatrix = crudeQ,
+                gen.inits = TRUE)
+markov14
+```
+
+```{r}
+hazard.msm(markov14)
+```
+
+```{r}
+qmatrix.msm(markov14, covariates = list(hbov.pos = 1))
+```
+
+```{r}
+sojourn.msm(markov14, covariates = list(hbov.pos = 1))
+```
+
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(hbov.pos = 0), list(hbov.pos = 1))
+form <- as.formula(~hbov.pos)
+
+boca_boot <- bootSojourn(formula = form,
+                           data = states_red,
+                           B = 1000,
+                           cluster = "id", 
+                           difflist = difflist,
+                           qmatrix = crudeQ,
+                           censor = 0)
+```
+
+```{r}
+boca_boot$results
+```
+
+> Playgroup Attendance
+
+```{r}
+markov15 <- msm(state ~ weeks,
+                subject = id,
+                covariates = ~playgrp,
+                censor = 0,
+                data = states_red,
+                qmatrix = crudeQ,
+                gen.inits = TRUE)
+markov15
+```
+
+```{r}
+hazard.msm(markov15)
+```
+
+```{r}
+qmatrix.msm(markov15, covariates = list(playgrp = 1))
+```
+
+```{r}
+sojourn.msm(markov15, covariates = list(playgrp = 1))
+```
+
+```{r, echo = TRUE, eval = FALSE}
+difflist <- list(list(playgrp = 0), list(playgrp = 1))
+form <- as.formula(~playgrp)
+
+pg_boot <- bootSojourn(formula = form,
+                       data = states_red,
+                       B = 1000,
+                       cluster = "id", 
+                       difflist = difflist,
+                       qmatrix = crudeQ,
+                       censor = 0)
+```
+
+```{r}
+pg_boot$results
+```
+
+```{r, echo = FALSE, eval = TRUE}
+rm(list = ls(pattern = "markov|hazard|totals|boot"))
+detach('package:msm')
 ```
 
 ## Recurrent Events Approach
@@ -1027,12 +1775,14 @@ states_cov %>%
   select(id) %>%
   table() %>%
   data.frame() %>%
-  summarise(n = n(),
-            mean = mean(Freq),
-            sd = sd(Freq),
-            median = median(Freq),
-            min = min(Freq),
-            max = max(Freq))
+  summarise(
+    n = n(),
+    mean = mean(Freq),
+    sd = sd(Freq),
+    median = median(Freq),
+    min = min(Freq),
+    max = max(Freq)
+    )
 ```
 
 The median number of ARI episodes is 16.4, ranging from 1 episode to 46 episodes
@@ -1061,7 +1811,7 @@ $$\lambda_{ij}(t|\omega_j)=\lambda_0(t)_i \omega_j \exp(\beta^\prime X_{ij})$$
 
 Where $X_{ij}$ could be time-varying $X_{ij}(t)$ (eg. daycare and playgroup) 
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 library(frailtypack)
 
 recur.mod1 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + daycare,
@@ -1112,6 +1862,36 @@ plot(recur.mod2, type.plot = "Survival", conf.bands = TRUE, color = 1)
 
 ### Stratified
 
+```{r, eval = TRUE, echo = FALSE}
+# function to extract survival probabilities from frailtyPenal() fit objects
+# with stratified variables
+#' @param fit Object of class frailtyPenal with or without stratified covariate, strata()
+#' @param strata character vector of strata names, default is NULL
+#' @value object of class data.frame() with columns Strata, Surv (survival probability), LB (95% CI lower bound), UB (95% CI upper bound)
+
+extractStrataFit <- function(fit, strata = NULL) {
+  header <- c("Surv", "LB", "UB", "Strata", "Time")
+  if (!is.null(strata)) {
+    strata1 <- as.data.frame(fit$surv[, , 1])
+    strata1$strata <- strata[1]
+    strata1$time <- as.numeric(rownames(strata1))
+    
+    strata2 <- as.data.frame(fit$surv[, , 2])
+    strata2$strata <- strata[2]
+    strata2$time <- as.numeric(rownames(strata2))
+    
+    df <- data.frame(rbind(strata1, strata2))
+    colnames(df) <- header
+    return(df)
+  } else {
+    df <- data.frame(fit$surv[, , 1])
+    df$time <- as.numeric(rownames(df))
+    colnames(df) <- header[c(1:3, 5)]
+    return(df)
+  }
+}
+```
+
 > Stratified by sex
 
 ```{r}
@@ -1135,6 +1915,35 @@ recur.mod3 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) +
 ```{r}
 recur.mod3
 summary(recur.mod3)
+```
+
+```{r}
+# function to plot survival curves extracted from frailtyPenal class objects
+#' @param fit Object of class frailtyPenal with or without stratified covariate, strata()
+#' @param strata character vector of strata names, default is NULL
+#' @param xlab x-axis label, default is empty string ("")
+#' @param ylab y-axis label, default is empty string ("")
+#' @param legendpos numeric vector of length 2, acceptable values between 0, 1
+
+plotStratSurv <- function(fit,
+                          strata,
+                          xlab = "",
+                          ylab = "",
+                          legendpos = c(0.8, 0.8)) {
+  extractStrataFit(fit, strata) %>%
+  ggplot(aes(x = Time, y = Surv, ymin = LB, ymax = UB, fill = Strata)) %>%
+  add(geom_line(aes(color = Strata))) %>%
+  add(geom_ribbon(alpha = 0.2)) %>%
+  add(scale_color_manual(name = "", values = set1[1:2])) %>%
+  add(scale_fill_manual(name = "", values = set1[1:2])) %>%
+  add(guides(color = guide_legend(override.aes = list(fill = NA)))) %>%
+  add(theme_trueMinimal()) %>%
+  add(theme(
+    legend.position = legendpos,
+    legend.justification = "top")
+    ) %>%
+  add(labs(x = xlab, y = ylab))
+}
 ```
 
 > Stratification by siblings
@@ -1175,6 +1984,8 @@ recur.mod5
 summary(recur.mod5)
 ```
 
+> Playgroup Activity + Daycare Attendance
+
 ```{r}
 recur.mod6 <- frailtyPenal(Surv(t.start, t.stop, ill) ~ cluster(id) + 
                              playgrp + daycare,
@@ -1187,14 +1998,17 @@ recur.mod6
 summary(recur.mod6)
 ```
 
+```{r}
+rm(list = ls(pattern = "mod"))
+detach('package:frailtypack')
+detach('package:MASS')
+```
+
 ## Changepoint Analysis
 
 Infants enter daycare at the - seemingly random - behest of their guardians. As methods have not been widely developed for longitudinal data with random changepoints, the idea here is to base the timing of life on the week children enter daycare, week 0, and count backward and forward from there. The interest lies on entry into daycare and the experience while in daycare, not the exit and so the data have been truncated to the end of daycare attendance.
 
 ```{r}
-detach('package:frailtypack')
-detach('package:MASS')
-
 chng.df <- diary %>%
   filter(daycare == 1) %>%
   group_by(id) %>%
@@ -1263,7 +2077,7 @@ Where $\beta_c$ could take the form of a random intercept or slope.
 
 > Daycare + Start Age
 
-```{r, fig.height = 8, fig.width = 8}
+```{r, fig.height = 8, fig.width = 8, message = FALSE, warning = FALSE}
 library(brms)
 library(rstan)
 theme_set(theme_trueMinimal())
@@ -1271,10 +2085,12 @@ theme_set(theme_trueMinimal())
 # brmmod1 <- brm(ill ~ time:daycare + start + (1 | id),
 #                prior = c(set_prior ("normal (0, 5)", class = "b")),
 #                data = chng.df,
+#                prior = c(prior(student_t(5, 0, 10), class = "b"),
+#                          prior(cauchy(0, 2), class = "sd")),
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod1, "brm_dc_start.rds")
 brmmod1 <- readRDS("brm_dc_start.rds")
@@ -1302,18 +2118,21 @@ plot(marginal_effects(brmmod1), points = TRUE, newpage = FALSE, ask = FALSE)
 The second plot doesn't make much sense as daycare attendance before time = 0 cannot happen, by definition.
 
 ```{r, eval = TRUE, echo = FALSE}
-# Helper functions
-
 # function to plot predictions from (g)lmm models with 1 changepoint
-# @param pframe data frame of 
-# @param df optional data frame of group-wise trajectories, for spaghetti plots
-# @param x character string for variable in pframe and df where x is the independent axis in the plot
-# @param y character string for variable in pframe and df where y is the dependent axis in the plot
-# @param group optional, describes cluster in df for spaghetti plots
+#' @param pframe data frame of 
+#' @param df optional data frame of group-wise trajectories, for spaghetti plots
+#' @param x character string for variable in pframe and df where x is the independent axis in the plot
+#' @param y character string for variable in pframe and df where y is the dependent axis in the plot
+#' @param group optional, describes cluster in df for spaghetti plots
+#' @param xlab character string x-axis label
+#' @param ylab character string y-axis label
+
 predChngPlot <- function(pframe,
                          df = NULL,
                          x, y,
-                         group = NULL) {
+                         group = NULL,
+                         xlab = "Standardized Study Time (weeks)",
+                         ylab = "Probability of ARI") {
   
   set1 <- RColorBrewer::brewer.pal(9, "Set1")
   p <- pframe %>%
@@ -1321,10 +2140,7 @@ predChngPlot <- function(pframe,
     add(geom_line(color = set1[1])) %>%
     add(geom_vline(xintercept = 0, lty = 2)) %>%
     add(theme_trueMinimal(16)) %>%
-    add(labs(
-      x = "Standardized Study Times, Weeks",
-      y = "Probability of ARI"
-    ))
+    add(labs(x = xlab, y = ylab))
   
   if (!is.null(df)) {
     p <- p + geom_line(data = df, 
@@ -1355,25 +2171,28 @@ pframe <- cbind(pframe, prediction)
 
 colnames(pframe) <- c("time", "start", "daycare", "ill", "SE", "LB", "UB")
 
-predChngPlot(pframe, chng.df, "time", "ill", "id")
+p1 <- predChngPlot(pframe, chng.df, "time", "ill", "id")
+p1
 ```
 
 The red-line is the prediction from the model, with a changepoint at 0 for time of daycare entrance.
 
 ```{r}
-predChngPlot(pframe = pframe, x = "time", y = "ill")
+p2 <- predChngPlot(pframe = pframe, x = "time", y = "ill")
+p2
 ```
 
 > Daycare + Start Age + Sex
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # brmmod2 <- brm(ill ~ time:daycare + start + female + (1 | id),
-#                prior = c(set_prior ("normal (0, 5)", class = "b")),
+#                prior = c(prior(student_t(5, 0, 10), class = "b"),
+#                          prior(cauchy(0, 2), class = "sd")),
 #                data = chng.df,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod2, "brm_dc_start_sex.rds")
 brmmod2 <- readRDS("brm_dc_start_sex.rds")
@@ -1383,12 +2202,10 @@ exp(fixef(brmmod2))
 ```
 
 ```{r, echo = FALSE, eval = TRUE}
-# Helper Functions
-
 # function to extract model predictions from model of class 'brmsfit',
 # specific to this project
-# @param conditions data.frame of conditions for prediction, correspond to features/covariates of model parameter
-# @param model of class 'brmsfit'
+#' @param conditions data.frame of conditions for prediction, correspond to features/covariates of model parameter
+#' @param model of class 'brmsfit'
 extractPred <- function(conditions, model) {
   predicted <- marginal_effects(model, conditions = conditions)
   predicted.df <- predicted$`time:daycare` %>% 
@@ -1399,12 +2216,12 @@ extractPred <- function(conditions, model) {
 }
 
 # function to plot group predictions from model of class 'brmsfit'
-# @param df data.frame formatted output from brms::prediction()
-# @param group character string corresponding to a factor covariate in call to brms::brm
-# @param labels factor labels for group parameter
-# @param set color set (e.g. RColorBrewer(9, "Set1"))
-# @param legend.pos vector of type 'num' describing relative coordinates of legend position
-# @param conf.band plot credible intervals/confidence bands?
+#' @param df data.frame formatted output from brms::prediction()
+#' @param group character string corresponding to a factor covariate in call to brms::brm
+#' @param labels factor labels for group parameter
+#' @param set color set (e.g. RColorBrewer(9, "Set1"))
+#' @param legend.pos vector of type 'num' describing relative coordinates of legend position
+#' @param conf.band plot credible intervals/confidence bands?
 predGrpPlot <- function(df,
                         group,
                         labels,
@@ -1422,7 +2239,7 @@ predGrpPlot <- function(df,
     add(theme(legend.position = legend.pos)) %>%
     add(scale_color_manual(values = c(set[1], set[2]))) %>%
     add(labs(
-      x = "Time, weeks",
+      x = "Time (weeks)",
       y = "Probability of ARI",
       color = ""
     ))
@@ -1443,21 +2260,27 @@ set1 <- RColorBrewer::brewer.pal(9, "Set1")
 
 conditions <- data.frame(female = c(0, 1))
 
-predicted <- extractPred(conditions, brmmod2)
+predicted.female <- extractPred(conditions, brmmod2)
 
-predGrpPlot(predicted, "female", c("Male", "Female"), set1, conf.band = TRUE)
+p3 <- predGrpPlot(predicted.female, 
+                  "female",
+                  c("Male", "Female"), 
+                  set1,
+                  conf.band = TRUE)
+p3
 ```
 
 > Daycare + Start Age + siblings
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # brmmod3 <- brm(ill ~ time:daycare + start + siblings + (1 | id),
-#                prior = c(set_prior ("normal (0, 5)", class = "b")),
+#                prior = c(prior(student_t(5, 0, 10), class = "b"),
+#                          prior(cauchy(0, 2), class = "sd")),
 #                data = chng.df,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod3, "brm_dc_start_sibs.rds")
 brmmod3 <- readRDS("brm_dc_start_sibs.rds")
@@ -1469,24 +2292,27 @@ exp(fixef(brmmod3))
 ```{r}
 conditions <- data.frame(siblings = c(0, 1))
 
-predicted <- extractPred(conditions, brmmod3)
+predicted.sibs <- extractPred(conditions, brmmod3)
 
-predGrpPlot(predicted, 
-            "siblings", 
-            c("No Siblings", "Siblings"), 
-            set1, 
-            conf.band = TRUE)
+p4 <- predGrpPlot(predicted.sibs, 
+                  "siblings", 
+                  c("No Siblings", "Siblings"), 
+                  set1, 
+                  conf.band = TRUE)
+p4
 ```
 
 > Daycare + Start Age + HBoV-1 carry
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # brmmod4 <- brm(ill ~ time:daycare + start + hbov.pos + (1 | id),
+#                prior = c(prior(student_t(5, 0, 10), class = "b"),
+#                          prior(cauchy(0, 2), class = "sd")),
 #                data = chng.df,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod4, "brm_dc_start_boca.rds")
 brmmod4 <- readRDS("brm_dc_start_boca.rds")
@@ -1498,25 +2324,27 @@ exp(fixef(brmmod4))
 ```{r}
 conditions <- data.frame(hbov.pos = c(0, 1))
 
-predicted <- extractPred(conditions, brmmod4)
+predicted.boca <- extractPred(conditions, brmmod4)
 
-predGrpPlot(predicted, 
-            "hbov.pos", 
-            c("HBoV-1 (-)", "HBoV-1 (+)"), 
-            set1, 
-            conf.band = TRUE)
+p5 <- predGrpPlot(predicted.boca, 
+                  "hbov.pos", 
+                  c("HBoV-1 (-)", "HBoV-1 (+)"), 
+                  set1, 
+                  conf.band = TRUE)
+p5
 ```
-
 
 > Daycare + Start Age + Play Group Activity
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # brmmod5 <- brm(ill ~ time:daycare + start + playgrp + (1 | id),
+#                prior = c(prior(student_t(5, 0, 10), class = "b"),
+#                          prior(cauchy(0, 2), class = "sd")),
 #                data = chng.df,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod5, "brm_dc_start_pg.rds")
 brmmod5 <- readRDS("brm_dc_start_pg.rds")
@@ -1528,25 +2356,28 @@ exp(fixef(brmmod5))
 ```{r}
 conditions <- data.frame(playgrp = c(0, 1))
 
-predicted <- extractPred(conditions, brmmod5)
+predicted.pg <- extractPred(conditions, brmmod5)
 
-predGrpPlot(predicted, 
-            "playgrp", 
-            c("No Play Group", "Play Group"), 
-            set1,
-            legend.pos = c(0.15, 0.85),
-            conf.band = TRUE)
+p6 <- predGrpPlot(predicted.pg, 
+                  "playgrp", 
+                  c("No Play Group", "Play Group"), 
+                  set1,
+                  legend.pos = c(0.15, 0.85),
+                  conf.band = TRUE)
+p6
 ```
 
 > Daycare + Start Age + Random Slope
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # brmmod6 <- brm(ill ~ time:daycare + start + (1 + time | id),
+#                prior = c(prior(student_t(5, 0, 10), class = "b"),
+#                          prior(cauchy(0, 2), class = "sd")),
 #                data = chng.df,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod6, "brm_dc_start_ranslope.rds")
 brmmod6 <- readRDS("brm_dc_start_ranslope.rds")
@@ -1556,8 +2387,10 @@ exp(fixef(brmmod6))
 ```
 
 ```{r}
-WAIC(brmmod1, brmmod6, compare = TRUE, cores = 4)
+WAIC(brmmod1, brmmod6, compare = TRUE)
 ```
+
+Random intercept and slope is a better fit than random slope alone
 
 ```{r}
 pframe <- data.frame(
@@ -1577,23 +2410,26 @@ pframe <- cbind(pframe, prediction)
 
 colnames(pframe) <- c("time", "start", "daycare", "ill", "SE", "LB", "UB")
 
-predChngPlot(pframe, chng.df, "time", "ill", "id")
+p7 <- predChngPlot(pframe, chng.df, "time", "ill", "id")
+p7
 ```
 
 ```{r}
-predChngPlot(pframe, x = "time", y = "ill")
+p8 <- predChngPlot(pframe, x = "time", y = "ill")
+p8
 ```
 
 > Daycare + Start Age + Sex + Random Slope
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # brmmod7 <- brm(ill ~ time:daycare + start + female + (1 + time | id),
-#                prior = c(set_prior ("normal (0, 5)", class = "b")),
+#                prior = c(prior(student_t(5, 0, 10), class = "b"),
+#                          prior(cauchy(0, 2), class = "sd")),
 #                data = chng.df,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod7, "brm_dc_start_sex_rans.rds")
 brmmod7 <- readRDS("brm_dc_start_sex_rans.rds")
@@ -1605,25 +2441,28 @@ exp(fixef(brmmod7))
 ```{r}
 conditions <- data.frame(female = c(0, 1))
 
-predicted <- extractPred(conditions, brmmod7)
+predicted.female.ransl <- extractPred(conditions, brmmod7)
 
-predGrpPlot(predicted, 
-            "female", 
-            c("Male", "Female"), 
-            set1,
-            legend.pos = c(0.15, 0.85),
-            conf.band = TRUE)
+p9 <- predGrpPlot(predicted.female.ransl, 
+                  "female", 
+                  c("Male", "Female"), 
+                  set1,
+                  legend.pos = c(0.15, 0.85),
+                  conf.band = TRUE)
+p9
 ```
 
 > Daycare + Start Age + Siblings + Random Slope
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # brmmod8 <- brm(ill ~ time:daycare + start + siblings + (1 + time | id),
+#                prior = c(prior(student_t(5, 0, 10), class = "b"),
+#                          prior(cauchy(0, 2), class = "sd")),
 #                data = chng.df,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod8, "brm_dc_start_sibs_rans.rds")
 brmmod8 <- readRDS("brm_dc_start_sibs_rans.rds")
@@ -1635,25 +2474,28 @@ exp(fixef(brmmod8))
 ```{r}
 conditions <- data.frame(siblings = c(0, 1))
 
-predicted <- extractPred(conditions, brmmod8)
+predicted.sibs.ransl <- extractPred(conditions, brmmod8)
 
-predGrpPlot(predicted, 
-            "siblings", 
-            c("No Siblings", "Siblings"), 
-            set1,
-            legend.pos = c(0.15, 0.85),
-            conf.band = TRUE)
+p10 <- predGrpPlot(predicted.sibs.ransl, 
+                   "siblings", 
+                   c("No Siblings", "Siblings"), 
+                   set1,
+                   legend.pos = c(0.15, 0.85),
+                   conf.band = TRUE)
+p10
 ```
 
 > Daycare + Start Age + HBoV-1 carry + Random Slopes
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # brmmod9 <- brm(ill ~ time:daycare + start + hbov.pos + (1 + time | id),
+#                prior = c(prior(student_t(5, 0, 10), class = "b"),
+#                          prior(cauchy(0, 2), class = "sd")),
 #                data = chng.df,
 #                family = bernoulli,
 #                cores = 4)
 
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod9, "brm_dc_start_boca_rans.rds")
 brmmod9 <- readRDS("brm_dc_start_boca_rans.rds")
@@ -1665,25 +2507,28 @@ exp(fixef(brmmod9))
 ```{r}
 conditions <- data.frame(hbov.pos = c(0, 1))
 
-predicted <- extractPred(conditions, brmmod9)
+predicted.boca.ransl <- extractPred(conditions, brmmod9)
 
-predGrpPlot(predicted, 
+p11 <- predGrpPlot(predicted.boca.ransl, 
             "hbov.pos", 
             c("HBoV-1 (-)", "HBoV-1 (+)"), 
             set1,
             legend.pos = c(0.15, 0.85),
             conf.band = TRUE)
+p11
 ```
 
 > Daycare + Start Age + Play Group Activity
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # brmmod10 <- brm(ill ~ time:daycare + start + playgrp + (1 | id),
+#                 prior = c(prior(student_t(5, 0, 10), class = "b"),
+#                           prior(cauchy(0, 2), class = "sd")),
 #                 data = chng.df,
 #                 family = bernoulli,
 #                 cores = 4)
 
-setwd("S:/MartinEpi/Analysis/IllburdenDaycare/IllburdenDaycare/Rdata/output")
+setwd("Rdata/output")
 # setwd("~/Documents/Martin Lab/HBov-1/illness_burden_dc/Rdata/output")
 # saveRDS(brmmod10, "brm_dc_start_pg_rans.rds")
 brmmod10 <- readRDS("brm_dc_start_pg_rans.rds")
@@ -1695,14 +2540,48 @@ exp(fixef(brmmod10))
 ```{r}
 conditions <- data.frame(playgrp = c(0, 1))
 
-predicted <- extractPred(conditions, brmmod10)
+predicted.pg.ransl <- extractPred(conditions, brmmod10)
 
-predGrpPlot(predicted, 
-            "playgrp", 
-            c("No Play Group", "Play Group"), 
-            set1,
-            legend.pos = c(0.15, 0.85),
-            conf.band = TRUE)
+p12 <- predGrpPlot(predicted.pg.ransl,
+                   "playgrp",
+                   c("No Play Group", "Play Group"),
+                   set1,
+                   legend.pos = c(0.15, 0.85),
+                   conf.band = TRUE)
+p12
+```
+
+Put plots together for publication figure
+
+```{r}
+library(cowplot)
+library(grid)
+library(gridExtra)
+setwd("..")
+
+plotlist <- list(p9, p10, p11, p12)
+for(i in 1:length(plotlist)) {
+  plotlist[[i]] <- plotlist[[i]] + labs(x = "", y = "")
+}
+
+bottom <- plot_grid(plotlist[[1]],
+                    plotlist[[2]],
+                    plotlist[[3]],
+                    plotlist[[4]],
+                    nrow = 2,
+                    labels = LETTERS[2:5])
+g <- plot_grid(p8, bottom, 
+               ncol = 1, 
+               labels = c('A', ''), 
+               rel_heights = c(1, 2.5))
+g
+```
+
+```{r, eval = FALSE, echo = FALSE}
+# ggsave("plots/chngpt_plot.tiff", g,
+#        height = 16, width = 12, units = "in",
+#        dpi = 1200,
+#        compression = "lzw")
 ```
 
 # Misc. Functons
@@ -1726,17 +2605,32 @@ theme_trueMinimal <- function(base_size = 16, base_family = "") {
 }
 
 # function to simulate predictions from msm::pmatrix.msm
-# @param object of class 'msm' from msm package
-# @param levels factor levels for transitions in markov model
-# @param labels factor labels for transitions in markov model
+#' @param object of class 'msm' from msm package
+#' @param time integer, time interval to estimate transition probabilities
+#' @param levels factor levels for transitions in markov model
+#' @param labels factor labels for transitions in markov model
+#' @param covariates list of covariate values at which to estimate the transition probabilities
+
 pmat_sim <- function(model,
-                     iterations,
+                     time,
                      levels = NULL, 
-                     labels = NULL) {
+                     labels = NULL,
+                     covariates = NULL) {
   require(dplyr)
   df_list <- list()
-  for (i in 1:iterations) {
-    pmat <- pmatrix.msm(markov1, ci = "normal", t = i, cl = 0.95)
+  for (i in 1:time) {
+    if (is.null(covariates)) {
+      pmat <- pmatrix.msm(model, 
+                          ci = "normal", 
+                          t = i, 
+                          cl = 0.95)
+    } else {
+      pmat <- pmatrix.msm(model, 
+                          ci = "normal", 
+                          t = i, 
+                          cl = 0.95,
+                          covariates = covariates)
+    }
     estimates <- as.data.frame(as.table(pmat$estimates))
     colnames(estimates) <- c("From", "To", "P_rs")
     UB <- as.data.frame(as.table(pmat$U))
@@ -1757,16 +2651,17 @@ pmat_sim <- function(model,
       ) %>%
       select(-From, -To)
   } # end if
-  return(df)
+  df
 }
 
 # function to plot predictions from (g)lmm models with 1 changepoint
-# @param pframe data frame of 
-# @param df optional data frame of group-wise trajectories, for spaghetti plots
-# @param x character string for variable in pframe and df where x is the independent axis in the plot
-# @param y character string for variable in pframe and df where y is the dependent axis in the plot
-# @param group optional, describes cluster in df for spaghetti plots
-predChngPlot <- function(pframe, 
+#' @param pframe data frame of 
+#' @param df optional data frame of group-wise trajectories, for spaghetti plots
+#' @param x character string for variable in pframe and df where x is the independent axis in the plot
+#' @param y character string for variable in pframe and df where y is the dependent axis in the plot
+#' @param group optional, describes cluster in df for spaghetti plots
+
+predChngPlot <- function(pframe,
                          df = NULL, 
                          x, y, 
                          group = NULL) {
@@ -1792,10 +2687,66 @@ predChngPlot <- function(pframe,
   p
 }
 
+# function to extract survival probabilities from frailtyPenal() fit objects
+# with stratified variables
+#' @param fit Object of class frailtyPenal with or without stratified covariate, strata()
+#' @param strata character vector of strata names, default is NULL
+#' @value object of class data.frame() with columns Strata, Surv (survival probability), LB (95% CI lower bound), UB (95% CI upper bound)
+
+extractStrataFit <- function(fit, strata = NULL) {
+  header <- c("Surv", "LB", "UB", "Strata", "Time")
+  if (!is.null(strata)) {
+    strata1 <- as.data.frame(fit$surv[, , 1])
+    strata1$strata <- strata[1]
+    strata1$time <- as.numeric(rownames(strata1))
+    
+    strata2 <- as.data.frame(fit$surv[, , 2])
+    strata2$strata <- strata[2]
+    strata2$time <- as.numeric(rownames(strata2))
+    
+    df <- data.frame(rbind(strata1, strata2))
+    colnames(df) <- header
+    return(df)
+  } else {
+    df <- data.frame(fit$surv[, , 1])
+    df$time <- as.numeric(rownames(df))
+    colnames(df) <- header[c(1:3, 5)]
+    return(df)
+  }
+}
+
+# function to plot survival curves extracted from frailtyPenal class objects
+#' @param fit Object of class frailtyPenal with or without stratified covariate, strata()
+#' @param strata character vector of strata names, default is NULL
+#' @param xlab x-axis label, default is empty string ("")
+#' @param ylab y-axis label, default is empty string ("")
+#' @param legendpos numeric vector of length 2, acceptable values between 0, 1
+
+plotStratSurv <- function(fit,
+                          strata,
+                          xlab = "",
+                          ylab = "",
+                          legendpos = c(0.8, 0.8)) {
+  extractStrataFit(fit, strata) %>%
+  ggplot(aes(x = Time, y = Surv, ymin = LB, ymax = UB, fill = Strata)) %>%
+  add(geom_line(aes(color = Strata))) %>%
+  add(geom_ribbon(alpha = 0.2)) %>%
+  add(scale_color_manual(name = "", values = set1[1:2])) %>%
+  add(scale_fill_manual(name = "", values = set1[1:2])) %>%
+  add(guides(color = guide_legend(override.aes = list(fill = NA)))) %>%
+  add(theme_trueMinimal()) %>%
+  add(theme(
+    legend.position = legendpos,
+    legend.justification = "top")
+    ) %>%
+  add(labs(x = xlab, y = ylab))
+}
+
 # function to extract model predictions from model of class 'brmsfit',
 # specific to this project
-# @param conditions data.frame of conditions for prediction, correspond to features/covariates of model parameter
-# @param model of class 'brmsfit'
+#' @param conditions data.frame of conditions for prediction, correspond to features/covariates of model parameter
+#' @param model of class 'brmsfit'
+
 extractPred <- function(conditions, model) {
   predicted <- marginal_effects(model, conditions = conditions)
   predicted.df <- predicted$`time:daycare` %>% 
@@ -1806,12 +2757,13 @@ extractPred <- function(conditions, model) {
 }
 
 # function to plot group predictions from model of class 'brmsfit'
-# @param df data.frame formatted output from brms::prediction()
-# @param group character string corresponding to a factor covariate in call to brms::brm
-# @param labels factor labels for group parameter
-# @param set color set (e.g. RColorBrewer(9, "Set1"))
-# @param legend.pos vector of type 'num' describing relative coordinates of legend position
-# @param conf.band plot credible intervals/confidence bands?
+#' @param df data.frame formatted output from brms::prediction()
+#' @param group character string corresponding to a factor covariate in call to brms::brm
+#' @param labels factor labels for group parameter
+#' @param set color set (e.g. RColorBrewer(9, "Set1"))
+#' @param legend.pos vector of type 'num' describing relative coordinates of legend position
+#' @param conf.band plot credible intervals/confidence bands?
+
 predGrpPlot <- function(df,
                         group,
                         labels,
@@ -1842,6 +2794,71 @@ predGrpPlot <- function(df,
     p <- p + scale_fill_manual(values = c(set[1], set[2]))
   }
   p
+}
+
+# function to perform bootstrap estimation on sojourn difference estimates
+# requires libraries msm, dplyr
+# cluster should be called 'id', for now...msm issue
+#' @param formula, object of class 'formula' for use in msm::msm(covariates = ,)
+#' @param data, data.frame for msm::msm()
+#' @param B boostrap replicates
+#' @param pergrp number of groups per bootstrap replicate
+#' @param grp, charcter string describing subjects in data parameter
+#' @param difflist object of type 'list' to pass to msm::sojourn.msm(covariates = ,)
+#' @param Q object of type 'matrix', initial/crude matrix for setting up Q tranisiton matrix in msm::msm()
+#' @param censor indicator in data$states denoting censored observations/states
+
+bootSojourn <- function(formula,
+                        data,
+                        B = 100,
+                        cluster,
+                        difflist,
+                        qmatrix,
+                        censor) {
+  
+  sojourn_diff <- matrix(NA, nrow = B, ncol = 1)
+  
+  pb <- txtProgressBar(min = 1, max = B, style = 3)
+  for (i in 1:B) {
+    
+    data[, cluster] <- as.factor(data[, cluster])
+    
+    clust_samp <- sample(levels(data[[cluster]]), replace = TRUE)
+    
+    samp <- data[data[[cluster]] %in% clust_samp, ]
+    
+    markov <- msm(state ~ weeks,
+                  subject = id,
+                  covariates = formula,
+                  censor = censor,
+                  data = samp,
+                  qmatrix = qmatrix,
+                  gen.inits = TRUE)
+    
+    sojourn0 <- sojourn.msm(markov, covariates = difflist[[1]])
+    sojourn1 <- sojourn.msm(markov, covariates = difflist[[2]])
+    
+    sojourn_diff[i, 1] <- sojourn1[2, 1] - sojourn0[2, 1]
+    
+    setTxtProgressBar(pb, i)
+  }
+  
+  result <- data.frame(result = rep(NA, 2))
+  row.names(result) <- c("Mean (SD):", "Median (95% CI):")
+  
+  result[1, ] <- paste0(round(mean(sojourn_diff), 2), 
+                        " (",
+                        round(sd(sojourn_diff), 2),
+                        ")")
+  
+  result[2, ] <- paste0(round(quantile(sojourn_diff, 0.5), 2),
+                        " (",
+                        round(quantile(sojourn_diff, 0.025), 2),
+                        ", ",
+                        round(quantile(sojourn_diff, 0.975), 2),
+                        ")")
+  
+  list(sojourn_diff = sojourn_diff, results = result)
 }
 ```
 
