@@ -151,6 +151,8 @@ pg_dates <- demo %>%
   filter(!is.na(play.start))
 ```
 
+Define ARI here as at least two of fever, cough, runnynose
+
 ```{r, warning = FALSE}
 dummy <- function(x) {
   x <- ifelse(x != 0, 1, 0)
@@ -1763,8 +1765,18 @@ detach('package:msm')
 
 ```{r}
 recur <- states_cov %>%
-  filter(ill == 1) %>%
-  select(-firstobs, -state)
+  group_by(id) %>%
+  mutate(last = row_number() == n()) %>%
+  filter(last | ill == 1) %>%
+  mutate(
+    t.stop = weeks,
+    t.start = lag(t.stop),
+    t.start = ifelse(is.na(t.start), 0, t.start),
+    time = t.stop - t.start
+  ) %>%
+  select(-firstobs, -sum, -state, -last) %>%
+  ungroup() %>%
+  data.frame()
 
 dim(recur)
 ```
@@ -1786,22 +1798,6 @@ states_cov %>%
 ```
 
 The median number of ARI episodes is 16.4, ranging from 1 episode to 46 episodes
-
-```{r}
-recur <- states_cov %>%
-  group_by(id) %>%
-  mutate(last = row_number() == n()) %>%
-  filter(last | ill == 1) %>%
-  mutate(
-    t.stop = weeks,
-    t.start = lag(t.stop),
-    t.start = ifelse(is.na(t.start), 0, t.start),
-    time = t.stop - t.start
-  ) %>%
-  select(-firstobs, -sum, -state, -last) %>%
-  ungroup() %>%
-  data.frame()
-```
 
 Shared frailty model:
 
@@ -2002,6 +1998,16 @@ summary(recur.mod6)
 rm(list = ls(pattern = "mod"))
 detach('package:frailtypack')
 detach('package:MASS')
+```
+
+## Duration of Daycare Attendance
+
+I will use recurrent events (ARI) analysis with daycare exposure entering as a continuous covariate 
+
+grabbing dates of ARI incidence,
+
+```{r}
+
 ```
 
 ## Changepoint Analysis
